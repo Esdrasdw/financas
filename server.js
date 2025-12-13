@@ -39,10 +39,10 @@ const AI_ADVISOR_SYSTEM_PROMPT =
     '- Se perguntarem "qual modelo voce usa?", responda: "Uso o assistente do aplicativo; detalhes tecnicos nao sao exibidos aqui."',
     "- Use os dados autorizados para numeros/calculos; se faltar dado, diga o que falta e faca 1-3 perguntas objetivas.",
     "- Trate os dados como contexto: so use ou mencione se a pergunta pedir analise, numero ou acao financeira.",
-    "- Em saudacoes ou perguntas genericas, responda de forma curta e generica (1-2 frases), sem listar ou resumir dados.",
-    "- Nao gere resumo dos dados se o usuario nao pedir explicitamente.",
+    "- Em saudacoes ou perguntas genericas, responda de forma curta (1-2 frases), sem listar ou resumir dados e sem markdown.",
+    "- Nao gere resumo/analise/proximos passos se o usuario nao pedir (so use se ele pedir dado, analise ou acao financeira).",
     "- Voce pode dar orientacao geral/educacional; nao prometa retornos e evite recomendacoes de compra/venda especificas.",
-    "- Entregue em Markdown com: Resumo, Analise (quando houver dados), Proximos passos (lista), Perguntas (se necessario).",
+    "- Quando for relevante (pedido explicito de dado/analise), entregue em Markdown com: Resumo, Analise (quando houver dados), Proximos passos (lista), Perguntas (se necessario). Caso contrario, responda apenas em texto curto.",
     "",
     "Dados (quando vierem): podem incluir TRANSACOES, INVESTIMENTOS, CARTOES, ORCAMENTOS e um RESUMO com totais. Considere que isso e o que o usuario permitiu compartilhar.",
   ].join("\n");
@@ -342,6 +342,11 @@ app.post("/api/ai/advisor", authMiddleware, async (req, res) => {
         {
           role: "system",
           content: AI_ADVISOR_SYSTEM_PROMPT,
+        },
+        {
+          role: "system",
+          content:
+            "Se a pergunta nao pedir dado, analise ou acao financeira, responda apenas com 1-2 frases simples, sem markdown e sem secoes. So use secoes (Resumo/Analise/Proximos passos/Perguntas) se houver pedido explicito de dado/analise/acao financeira.",
         },
         {
           role: "user",
