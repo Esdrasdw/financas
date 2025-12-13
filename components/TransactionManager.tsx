@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Transaction, TransactionType, CreditCard, RecurrenceType } from '../types';
+import { Transaction, TransactionType, CreditCard, RecurrenceType, PaymentMethod } from '../types';
 import { Plus, Trash2, Search, ArrowUpCircle, ArrowDownCircle, CreditCard as CardIcon, CalendarClock, Repeat, Download, FileUp, Wand2 } from 'lucide-react';
 import { getNextCardDueDate } from '../services/marketService';
 
@@ -8,12 +8,14 @@ interface TransactionManagerProps {
   cards: CreditCard[];
   onAdd: (transactions: Omit<Transaction, 'id'>[]) => void; // Modified to accept array
   onDelete: (id: string) => void;
-  onImportFromFile: (file: File, instructions?: string) => Promise<void>;
+  onImportFromFile: (payload: { file?: File | null; description?: string; instructions?: string }) => Promise<void>;
 }
 
 export const TransactionManager: React.FC<TransactionManagerProps> = ({ transactions, cards, onAdd, onDelete, onImportFromFile }) => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
+  const [selectedMonth, setSelectedMonth] = useState<string>('all');
+  const [selectedYear, setSelectedYear] = useState<string>('all');
   
   // Form State
   const [description, setDescription] = useState('');
@@ -21,6 +23,7 @@ export const TransactionManager: React.FC<TransactionManagerProps> = ({ transact
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
   const [category, setCategory] = useState('Geral');
   const [type, setType] = useState<TransactionType>(TransactionType.EXPENSE);
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('PIX');
   
   // Advanced Features State
   const [recurrence, setRecurrence] = useState<RecurrenceType>('NONE');
@@ -30,8 +33,11 @@ export const TransactionManager: React.FC<TransactionManagerProps> = ({ transact
   const [selectedCardId, setSelectedCardId] = useState('');
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [importNotes, setImportNotes] = useState('');
+  const [importText, setImportText] = useState('');
   const [isImporting, setIsImporting] = useState(false);
   const [importFeedback, setImportFeedback] = useState<string | null>(null);
+
+  const paymentLabels: Record<PaymentMethod, string> = { PIX: 'PIX', CASH: 'Dinheiro', CARD: 'Cartão' };
 
   // Update date if card selected
   useEffect(() => {
@@ -40,6 +46,7 @@ export const TransactionManager: React.FC<TransactionManagerProps> = ({ transact
       if (card) {
         setDate(getNextCardDueDate(card.closingDay, card.dueDay));
       }
+      setPaymentMethod('CARD');
     }
   }, [selectedCardId, cards]);
 
@@ -51,7 +58,8 @@ export const TransactionManager: React.FC<TransactionManagerProps> = ({ transact
       category,
       type,
       cardId: selectedCardId || undefined,
-      recurrence: recurrence
+      recurrence: recurrence,
+      paymentMethod: selectedCardId ? 'CARD' : paymentMethod,
     };
 
     const newTransactions: Omit<Transaction, 'id'>[] = [];
@@ -92,13 +100,13 @@ export const TransactionManager: React.FC<TransactionManagerProps> = ({ transact
   const resetForm = () => {
     setDescription(''); setAmount(''); setCategory('Geral'); setType(TransactionType.EXPENSE);
     setRecurrence('NONE'); setIsInstallment(false); setTotalInstallments(2); setPaidInstallments(0);
-    setSelectedCardId(''); setDate(new Date().toISOString().split('T')[0]);
+    setSelectedCardId(''); setDate(new Date().toISOString().split('T')[0]); setPaymentMethod('PIX');
   };
 
   const exportCSV = () => {
-    const headers = "ID,Description,Amount,Type,Date,Category,CardID\n";
+    const headers = "ID,Description,Amount,Type,Date,Category,PaymentMethod,CardID\n";
     const rows = transactions.map(t => 
-      `${t.id},"${t.description}",${t.amount},${t.type},${t.date},${t.category},${t.cardId || ''}`
+      `${t.id},"${t.description}",${t.amount},${t.type},${t.date},${t.category},${t.paymentMethod || ''},${t.cardId || ''}`
     ).join("\n");
     const blob = new Blob([headers + rows], { type: 'text/csv' });
     const url = window.URL.createObjectURL(blob);
@@ -109,10 +117,42 @@ export const TransactionManager: React.FC<TransactionManagerProps> = ({ transact
     window.URL.revokeObjectURL(url);
   };
 
-  const filteredTransactions = transactions.filter(t => 
-    t.description.toLowerCase().includes(searchTerm.toLowerCase()) || 
-    t.category.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filteredTransactions = transactions.filter(t => {
+    const search = searchTerm.toLowerCase();
+    const matchesSearch =
+      t.description.toLowerCase().includes(search) ||
+      t.category.toLowerCase().includes(search) ||
+      (t.paymentMethod || '').toLowerCase().includes(search);
+
+    const txDate = new Date(t.date);
+    const validDate = !Number.isNaN(txDate.getTime());
+    const matchesYear = selectedYear === 'all' || (validDate && txDate.getFullYear().toString() === selectedYear);
+    const matchesMonth = selectedMonth === 'all' || (validDate && String(txDate.getMonth() + 1) === selectedMonth);
+
+    return matchesSearch && matchesYear && matchesMonth;
+  });
+
+  const availableYears = Array.from(
+    new Set(
+      transactions
+        .map(t => {
+          const d = new Date(t.date);
+          return Number.isNaN(d.getTime()) ? null : d.getFullYear().toString();
+        })
+        .filter((val): val is string => Boolean(val))
+    )
+  ).sort((a, b) => Number(b) - Number(a));
+
+  const availableMonths = Array.from(
+    new Set(
+      transactions
+        .map(t => {
+          const d = new Date(t.date);
+          return Number.isNaN(d.getTime()) ? null : d.getMonth() + 1;
+        })
+        .filter((val): val is number => typeof val === 'number')
+    )
+  ).sort((a, b) => a - b);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -120,17 +160,18 @@ export const TransactionManager: React.FC<TransactionManagerProps> = ({ transact
   };
 
   const handleImport = async () => {
-    if (!selectedFile) {
-      setImportFeedback('Selecione um arquivo primeiro.');
+    if (!selectedFile && !importText.trim()) {
+      setImportFeedback('Envie um arquivo ou cole um resumo para importar.');
       return;
     }
     setIsImporting(true);
     setImportFeedback(null);
     try {
-      await onImportFromFile(selectedFile, importNotes);
+      await onImportFromFile({ file: selectedFile, instructions: importNotes, description: importText });
       setImportFeedback('Transacoes criadas automaticamente com a IA.');
       setSelectedFile(null);
       setImportNotes('');
+      setImportText('');
     } catch (error: any) {
       setImportFeedback(error?.message || 'Nao foi possivel importar agora.');
     } finally {
@@ -169,8 +210,8 @@ export const TransactionManager: React.FC<TransactionManagerProps> = ({ transact
           <div className="flex-1 space-y-2">
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
               <div>
-                <p className="text-sm font-semibold text-slate-800">Importar com IA (PDF, CSV, TXT)</p>
-                <p className="text-xs text-slate-500">Envie fatura, holerite ou extrato para virar transacoes automaticamente.</p>
+                <p className="text-sm font-semibold text-slate-800">Importar com IA (arquivo opcional)</p>
+                <p className="text-xs text-slate-500">Envie um arquivo ou apenas cole uma descricao/resumo que a IA cria as transacoes.</p>
               </div>
               <span className="text-[11px] text-slate-500">Data padrao: hoje</span>
             </div>
@@ -198,6 +239,13 @@ export const TransactionManager: React.FC<TransactionManagerProps> = ({ transact
                 {isImporting ? 'Enviando...' : 'Importar IA'}
               </button>
             </div>
+            <textarea
+              className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500 text-sm bg-white"
+              placeholder="Opcional: cole aqui um resumo/descricao do extrato, fatura ou das transacoes"
+              rows={3}
+              value={importText}
+              onChange={(e) => setImportText(e.target.value)}
+            />
             {importFeedback && <p className="text-xs text-amber-700">{importFeedback}</p>}
           </div>
         </div>
@@ -205,15 +253,41 @@ export const TransactionManager: React.FC<TransactionManagerProps> = ({ transact
 
       {/* Filters */}
       <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-100">
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 w-5 h-5" />
-          <input 
-            type="text" 
-            placeholder="Buscar transações..." 
-            className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-          />
+        <div className="flex flex-col md:flex-row gap-3">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 w-5 h-5" />
+            <input 
+              type="text" 
+              placeholder="Buscar transações..." 
+              className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+            />
+          </div>
+          <div className="flex gap-2">
+            <select
+              className="px-3 py-2 border border-slate-200 rounded-lg bg-slate-50 text-sm focus:ring-2 focus:ring-indigo-500"
+              value={selectedYear}
+              onChange={(e) => setSelectedYear(e.target.value)}
+            >
+              <option value="all">Todos os anos</option>
+              {availableYears.map((year) => (
+                <option key={year} value={year}>{year}</option>
+              ))}
+            </select>
+            <select
+              className="px-3 py-2 border border-slate-200 rounded-lg bg-slate-50 text-sm focus:ring-2 focus:ring-indigo-500"
+              value={selectedMonth}
+              onChange={(e) => setSelectedMonth(e.target.value)}
+            >
+              <option value="all">Todos os meses</option>
+              {availableMonths.map((month) => (
+                <option key={month} value={month.toString()}>
+                  {new Date(2024, month - 1, 1).toLocaleDateString('pt-BR', { month: 'short' })}
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
       </div>
 
@@ -247,6 +321,9 @@ export const TransactionManager: React.FC<TransactionManagerProps> = ({ transact
                   <div className="flex flex-col gap-1">
                     <span className="inline-flex w-fit items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-slate-100 text-slate-800">
                       {t.category}
+                    </span>
+                    <span className="inline-flex w-fit items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-indigo-50 text-indigo-700">
+                      {paymentLabels[t.paymentMethod as PaymentMethod] || t.paymentMethod || 'Pagamento'}
                     </span>
                     {t.cardId && (
                       <span className="flex items-center gap-1 text-xs text-indigo-600">
@@ -296,6 +373,7 @@ export const TransactionManager: React.FC<TransactionManagerProps> = ({ transact
                     setType(TransactionType.INCOME);
                     setIsInstallment(false);
                     setSelectedCardId('');
+                    setPaymentMethod('PIX');
                   }}
                   className={`flex-1 py-2 rounded-lg text-sm font-bold transition-all ${type === TransactionType.INCOME ? 'bg-white text-emerald-600 shadow-sm' : 'text-slate-500'}`}
                 >
@@ -322,7 +400,7 @@ export const TransactionManager: React.FC<TransactionManagerProps> = ({ transact
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-1">Categoria</label>
                   <select className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
@@ -338,6 +416,22 @@ export const TransactionManager: React.FC<TransactionManagerProps> = ({ transact
                     <option>Educação</option>
                     <option>Compras</option>
                   </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Meio de pagamento</label>
+                  <select
+                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
+                    value={paymentMethod}
+                    onChange={(e) => setPaymentMethod(e.target.value as PaymentMethod)}
+                    disabled={type === TransactionType.EXPENSE && Boolean(selectedCardId)}
+                  >
+                    <option value="PIX">PIX / Transferência</option>
+                    <option value="CASH">Dinheiro</option>
+                    <option value="CARD">Cartão</option>
+                  </select>
+                  {type === TransactionType.EXPENSE && selectedCardId && (
+                    <p className="text-[10px] text-slate-500 mt-1">Cartão selecionado define o meio de pagamento.</p>
+                  )}
                 </div>
                 {type === TransactionType.EXPENSE && (
                   <div>

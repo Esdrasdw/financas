@@ -99,7 +99,7 @@ export const askFinancialAdvisor = async (
   }
 
   dataContext +=
-    "Observacoes: Valores em BRL (R$). TRANSACOES seguem {date, description, amount, type, category, recurrence, cardId?}. INVESTIMENTOS seguem {name, amount, type, percentageOfCDI, startDate}.\n";
+    "Observacoes: Valores em BRL (R$). TRANSACOES seguem {date, description, amount, type, category, recurrence, paymentMethod, cardId?}. INVESTIMENTOS seguem {name, amount, type, percentageOfCDI, startDate}.\n";
 
   const normalizedHistory = Array.isArray(history)
     ? history

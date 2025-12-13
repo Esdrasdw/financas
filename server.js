@@ -27,6 +27,7 @@ const OPENAI_MODEL = process.env.OPENAI_MODEL || "gpt-5-nano";
 const openai = OPENAI_API_KEY ? new OpenAI({ apiKey: OPENAI_API_KEY }) : null;
 const DEFAULT_CDI_RATE = 11.25;
 const CDI_MAX_AGE_DAYS = 15;
+const PAYMENT_METHODS = ["PIX", "CASH", "CARD"];
 const AI_ASSISTANT_NAME = process.env.AI_ASSISTANT_NAME || "Assistente Financeiro";
 const AI_ADVISOR_SYSTEM_PROMPT =
   process.env.AI_ADVISOR_SYSTEM_PROMPT ||
@@ -65,14 +66,15 @@ const AI_INSIGHT_SYSTEM_PROMPT =
 const AI_IMPORT_SYSTEM_PROMPT =
   process.env.AI_IMPORT_SYSTEM_PROMPT ||
   [
-    "Voce ajuda a transformar extratos, faturas, holerites ou planilhas em lancamentos financeiros.",
+    "Voce ajuda a transformar extratos, faturas, holerites, planilhas ou descricoes livres em lancamentos financeiros.",
     "Leia o texto enviado e responda apenas com JSON no formato {\"transactions\": Array<Transacao>}",
-    "Transacao: {description: string, amount: number, type: \"INCOME\"|\"EXPENSE\", category?: string, date?: string}",
+    "Transacao: {description: string, amount: number, type: \"INCOME\"|\"EXPENSE\", category?: string, date?: string, paymentMethod?: \"PIX\"|\"CASH\"|\"CARD\"}",
     "Regras:",
     "- Nao responda com nada alem do JSON; nao inclua markdown.",
     "- Se nao houver data, use a data de referencia fornecida pelo sistema.",
     "- Use INCOME para salarios, recebimentos, reembolsos ou entradas; EXPENSE para faturas, boletos, impostos ou compras.",
     "- Categorize de forma simples: Salario, Moradia, Alimentacao, Transporte, Lazer, Investimentos, Impostos, Taxas, Compras, Outros.",
+    "- Se souber o meio de pagamento, preencha paymentMethod com PIX (transferencia/PIX), CASH (dinheiro) ou CARD (cartao).",
     "- Se o arquivo for um resumo geral (ex: limite do cartao), ignore e retorne lista vazia.",
   ].join("\n");
 
@@ -81,10 +83,46 @@ if (!JWT_SECRET) {
 }
 
 const demoTransactions = [
-  { id: "t1", description: "Salario mensal", amount: 5200, date: "2024-12-05", type: "INCOME", category: "Salario", recurrence: "MONTHLY" },
-  { id: "t2", description: "Aluguel", amount: 1500, date: "2024-12-08", type: "EXPENSE", category: "Moradia", recurrence: "MONTHLY" },
-  { id: "t3", description: "Supermercado", amount: 420.5, date: "2024-12-10", type: "EXPENSE", category: "Alimentacao", recurrence: "NONE" },
-  { id: "t4", description: "Investimento programado", amount: 350, date: "2024-12-12", type: "INCOME", category: "Investimentos", recurrence: "MONTHLY" },
+  {
+    id: "t1",
+    description: "Salario mensal",
+    amount: 5200,
+    date: "2024-12-05",
+    type: "INCOME",
+    category: "Salario",
+    recurrence: "MONTHLY",
+    paymentMethod: "PIX",
+  },
+  {
+    id: "t2",
+    description: "Aluguel",
+    amount: 1500,
+    date: "2024-12-08",
+    type: "EXPENSE",
+    category: "Moradia",
+    recurrence: "MONTHLY",
+    paymentMethod: "PIX",
+  },
+  {
+    id: "t3",
+    description: "Supermercado",
+    amount: 420.5,
+    date: "2024-12-10",
+    type: "EXPENSE",
+    category: "Alimentacao",
+    recurrence: "NONE",
+    paymentMethod: "CARD",
+  },
+  {
+    id: "t4",
+    description: "Investimento programado",
+    amount: 350,
+    date: "2024-12-12",
+    type: "INCOME",
+    category: "Investimentos",
+    recurrence: "MONTHLY",
+    paymentMethod: "PIX",
+  },
 ];
 
 const demoCards = [{ id: "c1", name: "Nubank", limit: 5000, dueDay: 10, closingDay: 3, color: "bg-purple-600" }];
@@ -159,7 +197,12 @@ function ensureDbShape(db) {
 
   Object.keys(normalized.finances).forEach((userId) => {
     const defaults = { transactions: [], cards: [], investments: [], budgets: [], goals: [] };
-    normalized.finances[userId] = { ...defaults, ...(normalized.finances[userId] || {}) };
+    const current = normalized.finances[userId] || {};
+    const withDefaults = { ...defaults, ...current };
+    withDefaults.transactions = Array.isArray(withDefaults.transactions)
+      ? withDefaults.transactions.map(normalizeTransaction)
+      : [];
+    normalized.finances[userId] = withDefaults;
   });
 
   if (!normalized.meta.cdiRate || Number.isNaN(Number(normalized.meta.cdiRate.value))) {
@@ -416,45 +459,59 @@ app.post("/api/ai/import-transactions", authMiddleware, async (req, res) => {
     return res.status(503).json({ message: "OPENAI_API_KEY nao configurado no servidor" });
   }
 
-  const { fileName, fileBase64, instructions } = req.body || {};
-  if (!fileName || !fileBase64) {
-    return res.status(400).json({ message: "Envie fileName e fileBase64 (base64 do arquivo)" });
+  const { fileName, fileBase64, instructions, textDescription } = req.body || {};
+  const hasFile = Boolean(fileBase64);
+  const hasTextDescription = typeof textDescription === "string" && textDescription.trim().length > 0;
+
+  if (!hasFile && !hasTextDescription) {
+    return res.status(400).json({ message: "Envie um arquivo ou um texto descrevendo as transacoes." });
   }
 
-  let buffer;
-  try {
-    const cleaned = String(fileBase64).replace(/^data:.*;base64,/, "");
-    buffer = Buffer.from(cleaned, "base64");
-  } catch (error) {
-    return res.status(400).json({ message: "Nao foi possivel ler o arquivo enviado" });
+  let buffer = null;
+  if (hasFile) {
+    try {
+      const cleaned = String(fileBase64).replace(/^data:.*;base64,/, "");
+      buffer = Buffer.from(cleaned, "base64");
+    } catch (error) {
+      return res.status(400).json({ message: "Nao foi possivel ler o arquivo enviado" });
+    }
+
+    if (!buffer?.length) {
+      return res.status(400).json({ message: "Arquivo vazio" });
+    }
   }
 
-  if (!buffer?.length) {
-    return res.status(400).json({ message: "Arquivo vazio" });
-  }
-
-  const extension = path.extname(String(fileName)).toLowerCase();
+  const extension = hasFile ? path.extname(String(fileName || "")).toLowerCase() : "";
   let extractedText = "";
-  try {
-    if (extension === ".pdf") {
-      const parsed = await pdfParse(buffer);
-      extractedText = parsed?.text || "";
-    } else {
+
+  if (hasFile) {
+    try {
+      if (extension === ".pdf") {
+        const parsed = await pdfParse(buffer);
+        extractedText = parsed?.text || "";
+      } else {
+        extractedText = buffer.toString("utf-8");
+      }
+    } catch (error) {
+      console.error("Erro ao extrair arquivo enviado:", error);
       extractedText = buffer.toString("utf-8");
     }
-  } catch (error) {
-    console.error("Erro ao extrair arquivo enviado:", error);
-    extractedText = buffer.toString("utf-8");
+  }
+
+  const manualText = hasTextDescription ? textDescription.toString().trim() : "";
+  if (manualText) {
+    extractedText = extractedText ? `${extractedText}\n\n${manualText}` : manualText;
   }
 
   const safeText = (extractedText || "").trim();
   if (!safeText) {
-    return res.status(400).json({ message: "Nao foi possivel ler o conteudo do arquivo" });
+    return res.status(400).json({ message: "Nao foi possivel ler o conteudo enviado" });
   }
 
   const referenceDate = new Date().toISOString().split("T")[0];
   const truncatedText = safeText.slice(0, 15000);
   const instructionsText = (instructions || "").toString().trim() || "Sem instrucoes adicionais";
+  const sourceLabel = hasFile && fileName ? fileName : "descricao-manual.txt";
 
   try {
     const completion = await openai.chat.completions.create({
@@ -464,7 +521,7 @@ app.post("/api/ai/import-transactions", authMiddleware, async (req, res) => {
         {
           role: "user",
           content: [
-            `Arquivo: ${fileName}`,
+            `Arquivo/Descricao: ${sourceLabel}`,
             `Data de referencia (para lancamentos sem data explicita): ${referenceDate}`,
             `Instrucoes do usuario: ${instructionsText}`,
             "",
@@ -729,7 +786,39 @@ function normalizeTransaction(input) {
     installmentCurrent: input.installmentCurrent,
     installmentTotal: input.installmentTotal,
     cardId: input.cardId,
+    paymentMethod: normalizePaymentMethod(input.paymentMethod, input.cardId),
   };
+}
+
+function normalizePaymentMethod(value, cardId) {
+  const upper = typeof value === "string" ? value.toUpperCase() : "";
+  const normalized = upper.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\s+/g, "");
+
+  const mapped = {
+    DINHEIRO: "CASH",
+    CASH: "CASH",
+    CARTAO: "CARD",
+    CARTAOCREDITO: "CARD",
+    CARTAODECREDITO: "CARD",
+    DEBITO: "CARD",
+    PIX: "PIX",
+    TRANSFERENCIA: "PIX",
+    TED: "PIX",
+    DOC: "PIX",
+  };
+
+  if (PAYMENT_METHODS.includes(upper)) {
+    return upper;
+  }
+
+  if (mapped[normalized]) {
+    return mapped[normalized];
+  }
+
+  if (cardId) {
+    return "CARD";
+  }
+  return "PIX";
 }
 
 function normalizeCard(input) {

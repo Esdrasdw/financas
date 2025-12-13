@@ -265,8 +265,8 @@ const App: React.FC = () => {
     }
   };
 
-  const importTransactionsFromFile = async (file: File, instructions?: string) => {
-    const { transactions: imported } = await api.importTransactionsFromFile(file, instructions);
+  const importTransactionsFromFile = async (payload: { file?: File | null; description?: string; instructions?: string }) => {
+    const { transactions: imported } = await api.importTransactionsFromFile(payload);
     setTransactions((prev) => [...imported, ...prev]);
   };
 

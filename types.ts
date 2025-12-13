@@ -4,6 +4,7 @@ export enum TransactionType {
 }
 
 export type RecurrenceType = 'NONE' | 'MONTHLY' | 'YEARLY';
+export type PaymentMethod = 'PIX' | 'CASH' | 'CARD';
 
 export interface Transaction {
   id: string;
@@ -17,6 +18,7 @@ export interface Transaction {
   installmentCurrent?: number;
   installmentTotal?: number;
   cardId?: string;
+  paymentMethod: PaymentMethod;
 }
 
 export interface CreditCard {

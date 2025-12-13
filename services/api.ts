@@ -138,14 +138,26 @@ export const api = {
     await apiRequest<void>(`/goals/${id}`, { method: "DELETE" });
   },
 
-  async importTransactionsFromFile(file: File, instructions?: string) {
-    const base64 = await fileToBase64(file);
+  async importTransactionsFromFile(payload: { file?: File | null; instructions?: string; description?: string }) {
+    if (!payload.file && !payload.description) {
+      throw new Error("Envie um arquivo ou uma descricao para importar.");
+    }
+
+    let fileBase64: string | undefined;
+    let fileName: string | undefined;
+
+    if (payload.file) {
+      fileBase64 = await fileToBase64(payload.file);
+      fileName = payload.file.name;
+    }
+
     return apiRequest<{ transactions: Transaction[]; preview?: string; usedInstructions?: string }>("/ai/import-transactions", {
       method: "POST",
       body: JSON.stringify({
-        fileName: file.name,
-        fileBase64: base64,
-        instructions,
+        fileName,
+        fileBase64,
+        instructions: payload.instructions,
+        textDescription: payload.description,
       }),
     });
   },
