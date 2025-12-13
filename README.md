@@ -32,5 +32,6 @@ Credenciais de demonstracao: `demo@financas.com / 123456`
    - `JWT_SECRET` (obrigatorio)
    - `OPENAI_API_KEY` (opcional, mas necessario para a IA)
    - `OPENAI_MODEL` (padrao `gpt-5-nano`)
-   - `DATA_DIR=/data` (aponta para volume persistente)
-3. Faca o deploy. O Railway injeta `PORT` automaticamente.
+   - `DATA_DIR=/data` (aponta para volume persistente; o codigo ja usa /data por padrao no Railway)
+3. Em **Volumes**, crie um volume e monte em `/data` para persistir `data/db.json` entre deploys.
+4. Faca o deploy. O Railway injeta `PORT` automaticamente.

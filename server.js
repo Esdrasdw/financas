@@ -1,8 +1,8 @@
 import express from "express";
 import cors from "cors";
 import fs from "fs/promises";
-import { existsSync } from "fs";
 import path from "path";
+import { existsSync } from "fs";
 import { randomUUID } from "crypto";
 import { fileURLToPath } from "url";
 import jwt from "jsonwebtoken";
@@ -12,10 +12,12 @@ import OpenAI from "openai";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, "data");
+const IS_RAILWAY = Boolean(process.env.RAILWAY_PROJECT_ID || process.env.RAILWAY_SERVICE_ID || process.env.RAILWAY_ENVIRONMENT);
+const DEFAULT_DATA_DIR = path.join(__dirname, "data");
+// Em Railway, padrao para o volume montado em /data (pode ser sobrescrito via DATA_DIR)
+const DATA_DIR = process.env.DATA_DIR || (IS_RAILWAY ? "/data" : DEFAULT_DATA_DIR);
 const DATA_FILE = path.join(DATA_DIR, "db.json");
 const PORT = Number(process.env.PORT) || 4000;
-const IS_RAILWAY = Boolean(process.env.RAILWAY_PROJECT_ID || process.env.RAILWAY_SERVICE_ID || process.env.RAILWAY_ENVIRONMENT);
 const IS_PRODUCTION = process.env.NODE_ENV === "production" || IS_RAILWAY;
 const JWT_SECRET = process.env.JWT_SECRET || (IS_PRODUCTION ? "" : "change-me-now");
 const TOKEN_EXPIRES_IN = process.env.JWT_EXPIRES_IN || "7d";
