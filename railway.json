@@ -10,7 +10,7 @@
     "limitOverride": {
       "containers": {
         "cpu": 0.05,
-        "memoryBytes": 31457280
+        "memoryBytes": 44457280
       }
     },
     "sleepApplication": false,
