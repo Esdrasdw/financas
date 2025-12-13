@@ -28,6 +28,7 @@ const openai = OPENAI_API_KEY ? new OpenAI({ apiKey: OPENAI_API_KEY }) : null;
 const DEFAULT_CDI_RATE = 11.25;
 const CDI_MAX_AGE_DAYS = 15;
 const PAYMENT_METHODS = ["PIX", "CASH", "CARD"];
+const PAYMENT_STATUS = ["PENDING", "PAID"];
 const AI_ASSISTANT_NAME = process.env.AI_ASSISTANT_NAME || "Assistente Financeiro";
 const AI_ADVISOR_SYSTEM_PROMPT =
   process.env.AI_ADVISOR_SYSTEM_PROMPT ||
@@ -68,7 +69,7 @@ const AI_IMPORT_SYSTEM_PROMPT =
   [
     "Voce ajuda a transformar extratos, faturas, holerites, planilhas ou descricoes livres em lancamentos financeiros.",
     "Leia o texto enviado e responda apenas com JSON no formato {\"transactions\": Array<Transacao>}",
-    "Transacao: {description: string, amount: number, type: \"INCOME\"|\"EXPENSE\", category?: string, date?: string, paymentMethod?: \"PIX\"|\"CASH\"|\"CARD\", isInstallment?: boolean, installmentTotal?: number, installmentsPaid?: number}",
+    "Transacao: {description: string, amount: number, type: \"INCOME\"|\"EXPENSE\", category?: string, date?: string, paymentMethod?: \"PIX\"|\"CASH\"|\"CARD\", isInstallment?: boolean, installmentTotal?: number, installmentsPaid?: number, status?: \"PENDING\"|\"PAID\"}",
     "Regras:",
     "- Nao responda com nada alem do JSON; nao inclua markdown.",
     "- Se nao houver data, use a data de referencia fornecida pelo sistema.",
@@ -76,6 +77,7 @@ const AI_IMPORT_SYSTEM_PROMPT =
     "- Categorize de forma simples: Salario, Moradia, Alimentacao, Transporte, Lazer, Investimentos, Impostos, Taxas, Compras, Outros.",
     "- Se souber o meio de pagamento, preencha paymentMethod com PIX (transferencia/PIX), CASH (dinheiro) ou CARD (cartao).",
     "- Compras parceladas: marque isInstallment=true, informe installmentTotal com o total de parcelas e installmentsPaid se algumas ja foram pagas.",
+    "- Se o pagamento ainda nao foi feito (ex: fatura do cartao ainda vai vencer), marque status como PENDING.",
     "- Pode retornar varias transacoes (varios produtos) no mesmo JSON; cada item deve representar um lancamento ou uma compra/parcelamento.",
     "- Se o arquivo for um resumo geral (ex: limite do cartao), ignore e retorne lista vazia.",
   ].join("\n");
@@ -563,6 +565,42 @@ app.post("/api/ai/import-transactions", authMiddleware, async (req, res) => {
   }
 });
 
+app.post("/api/ai/transactions/manage", authMiddleware, async (req, res) => {
+  const { deleteIds, updates, creates } = req.body || {};
+  const db = await loadDB();
+  const finances = ensureFinances(db, req.userId);
+  let changed = false;
+
+  if (Array.isArray(deleteIds) && deleteIds.length) {
+    finances.transactions = finances.transactions.filter((t) => !deleteIds.includes(t.id));
+    changed = true;
+  }
+
+  if (Array.isArray(updates)) {
+    updates.forEach((tx) => {
+      if (!tx?.id) return;
+      const index = finances.transactions.findIndex((t) => t.id === tx.id);
+      if (index !== -1) {
+        finances.transactions[index] = normalizeTransaction({ ...finances.transactions[index], ...tx, id: tx.id });
+        changed = true;
+      }
+    });
+  }
+
+  if (Array.isArray(creates)) {
+    const newOnes = creates.map((tx) => normalizeTransaction(tx));
+    finances.transactions = [...newOnes, ...finances.transactions];
+    changed = true;
+  }
+
+  if (changed) {
+    db.finances[req.userId] = finances;
+    await saveDB(db);
+  }
+
+  return res.json({ transactions: finances.transactions });
+});
+
 app.post("/api/auth/register", async (req, res) => {
   const { email, password, name } = req.body || {};
   if (!email || !password || !name) {
@@ -776,6 +814,7 @@ if (existsSync(DIST_DIR) && existsSync(DIST_INDEX)) {
 }
 
 function normalizeTransaction(input) {
+  const status = normalizePaymentStatus(input.status, input);
   return {
     id: input.id || randomUUID(),
     description: input.description ? String(input.description) : "Transacao",
@@ -789,6 +828,7 @@ function normalizeTransaction(input) {
     installmentTotal: input.installmentTotal,
     cardId: input.cardId,
     paymentMethod: normalizePaymentMethod(input.paymentMethod, input.cardId),
+    status,
   };
 }
 
@@ -820,6 +860,7 @@ function expandInstallmentsFromAi(tx, referenceDate) {
         isInstallment: true,
         installmentCurrent: installmentNumber,
         installmentTotal: total,
+        status: "PENDING",
       })
     );
   }
@@ -856,6 +897,20 @@ function normalizePaymentMethod(value, cardId) {
     return "CARD";
   }
   return "PIX";
+}
+
+function normalizePaymentStatus(value, txInput = {}) {
+  const upper = typeof value === "string" ? value.toUpperCase() : "";
+  if (PAYMENT_STATUS.includes(upper)) return upper;
+
+  const isExpense = txInput.type !== "INCOME";
+  const isCard = txInput.cardId || txInput.paymentMethod === "CARD";
+  const isFuture = txInput.date && new Date(txInput.date) > new Date();
+
+  if (isExpense && (isCard || isFuture || txInput.isInstallment)) {
+    return "PENDING";
+  }
+  return "PAID";
 }
 
 function normalizeCard(input) {

@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
-import { Transaction, TransactionType, CreditCard, RecurrenceType, PaymentMethod } from '../types';
-import { Plus, Trash2, Search, ArrowUpCircle, ArrowDownCircle, CreditCard as CardIcon, CalendarClock, Repeat, Download, FileUp, Wand2 } from 'lucide-react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { Transaction, TransactionType, CreditCard, RecurrenceType, PaymentMethod, PaymentStatus } from '../types';
+import { Plus, Trash2, Search, ArrowUpCircle, ArrowDownCircle, CreditCard as CardIcon, CalendarClock, Repeat, Download, FileUp, Wand2, CheckCircle2, Clock3 } from 'lucide-react';
 import { getNextCardDueDate } from '../services/marketService';
 
 interface TransactionManagerProps {
@@ -16,6 +16,7 @@ export const TransactionManager: React.FC<TransactionManagerProps> = ({ transact
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedMonth, setSelectedMonth] = useState<string>('all');
   const [selectedYear, setSelectedYear] = useState<string>('all');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'paid'>('all');
   
   // Form State
   const [description, setDescription] = useState('');
@@ -24,6 +25,7 @@ export const TransactionManager: React.FC<TransactionManagerProps> = ({ transact
   const [category, setCategory] = useState('Geral');
   const [type, setType] = useState<TransactionType>(TransactionType.EXPENSE);
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('PIX');
+  const [status, setStatus] = useState<PaymentStatus>('PENDING');
   
   // Advanced Features State
   const [recurrence, setRecurrence] = useState<RecurrenceType>('NONE');
@@ -38,6 +40,10 @@ export const TransactionManager: React.FC<TransactionManagerProps> = ({ transact
   const [importFeedback, setImportFeedback] = useState<string | null>(null);
 
   const paymentLabels: Record<PaymentMethod, string> = { PIX: 'PIX', CASH: 'Dinheiro', CARD: 'Cartão' };
+  const statusLabels: Record<PaymentStatus, { label: string; color: string }> = {
+    PENDING: { label: 'Pendente', color: 'bg-amber-100 text-amber-700 border border-amber-200' },
+    PAID: { label: 'Pago', color: 'bg-emerald-100 text-emerald-700 border border-emerald-200' },
+  };
 
   // Update date if card selected
   useEffect(() => {
@@ -47,13 +53,31 @@ export const TransactionManager: React.FC<TransactionManagerProps> = ({ transact
         setDate(getNextCardDueDate(card.closingDay, card.dueDay));
       }
       setPaymentMethod('CARD');
-    } else if (paymentMethod === 'CARD') {
+    }
+  }, [selectedCardId, cards]);
+
+  useEffect(() => {
+    if (!selectedCardId && paymentMethod === 'CARD') {
       setPaymentMethod('PIX');
     }
-  }, [selectedCardId, cards, paymentMethod]);
+  }, [selectedCardId, paymentMethod]);
+
+  useEffect(() => {
+    if (type === TransactionType.INCOME) {
+      setStatus('PAID');
+    } else if (selectedCardId) {
+      setStatus('PENDING');
+    }
+  }, [type, selectedCardId]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    const today = new Date().toISOString().split('T')[0];
+    const computedStatus: PaymentStatus =
+      type === TransactionType.INCOME
+        ? 'PAID'
+        : (selectedCardId || paymentMethod === 'CARD' || date > today || isInstallment) ? 'PENDING' : 'PAID';
+
     const baseTransaction = {
       description,
       amount: Number(amount), // Assuming this is Total Amount for installments
@@ -62,6 +86,7 @@ export const TransactionManager: React.FC<TransactionManagerProps> = ({ transact
       cardId: selectedCardId || undefined,
       recurrence: recurrence,
       paymentMethod: selectedCardId ? 'CARD' : paymentMethod,
+      status: status || computedStatus,
     };
 
     const newTransactions: Omit<Transaction, 'id'>[] = [];
@@ -84,7 +109,8 @@ export const TransactionManager: React.FC<TransactionManagerProps> = ({ transact
           date: txDate.toISOString().split('T')[0],
           isInstallment: true,
           installmentCurrent: currentNumber,
-          installmentTotal: totalInstallments
+          installmentTotal: totalInstallments,
+          status: 'PENDING',
         });
       }
     } else {
@@ -102,13 +128,13 @@ export const TransactionManager: React.FC<TransactionManagerProps> = ({ transact
   const resetForm = () => {
     setDescription(''); setAmount(''); setCategory('Geral'); setType(TransactionType.EXPENSE);
     setRecurrence('NONE'); setIsInstallment(false); setTotalInstallments(2); setPaidInstallments(0);
-    setSelectedCardId(''); setDate(new Date().toISOString().split('T')[0]); setPaymentMethod('PIX');
+    setSelectedCardId(''); setDate(new Date().toISOString().split('T')[0]); setPaymentMethod('PIX'); setStatus('PENDING');
   };
 
   const exportCSV = () => {
-    const headers = "ID,Description,Amount,Type,Date,Category,PaymentMethod,CardID\n";
+    const headers = "ID,Description,Amount,Type,Date,Category,PaymentMethod,Status,CardID\n";
     const rows = transactions.map(t => 
-      `${t.id},"${t.description}",${t.amount},${t.type},${t.date},${t.category},${t.paymentMethod || ''},${t.cardId || ''}`
+      `${t.id},"${t.description}",${t.amount},${t.type},${t.date},${t.category},${t.paymentMethod || ''},${t.status || ''},${t.cardId || ''}`
     ).join("\n");
     const blob = new Blob([headers + rows], { type: 'text/csv' });
     const url = window.URL.createObjectURL(blob);
@@ -130,8 +156,14 @@ export const TransactionManager: React.FC<TransactionManagerProps> = ({ transact
     const validDate = !Number.isNaN(txDate.getTime());
     const matchesYear = selectedYear === 'all' || (validDate && txDate.getFullYear().toString() === selectedYear);
     const matchesMonth = selectedMonth === 'all' || (validDate && String(txDate.getMonth() + 1) === selectedMonth);
+    const matchesStatus =
+      statusFilter === 'all'
+        ? true
+        : statusFilter === 'pending'
+        ? (t.status || 'PENDING') === 'PENDING'
+        : (t.status || 'PENDING') === 'PAID';
 
-    return matchesSearch && matchesYear && matchesMonth;
+    return matchesSearch && matchesYear && matchesMonth && matchesStatus;
   });
 
   const availableYears = Array.from(
@@ -155,6 +187,23 @@ export const TransactionManager: React.FC<TransactionManagerProps> = ({ transact
         .filter((val): val is number => typeof val === 'number')
     )
   ).sort((a, b) => a - b);
+
+  const pendingTransactions = useMemo(
+    () => transactions.filter((t) => (t.status || 'PENDING') === 'PENDING'),
+    [transactions]
+  );
+  const pendingTotal = useMemo(
+    () => pendingTransactions.reduce((acc, t) => acc + (t.type === TransactionType.EXPENSE ? t.amount : -t.amount), 0),
+    [pendingTransactions]
+  );
+  const pendingExpenseTotal = useMemo(
+    () => pendingTransactions.filter(t => t.type === TransactionType.EXPENSE).reduce((acc, t) => acc + t.amount, 0),
+    [pendingTransactions]
+  );
+  const paidTotal = useMemo(
+    () => transactions.filter(t => (t.status || 'PENDING') === 'PAID').reduce((acc, t) => acc + t.amount, 0),
+    [transactions]
+  );
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -201,6 +250,37 @@ export const TransactionManager: React.FC<TransactionManagerProps> = ({ transact
             <Plus size={20} />
             Nova Transação
           </button>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div className="p-4 rounded-2xl bg-white border border-slate-100 shadow-sm">
+          <p className="text-xs font-semibold text-slate-500 uppercase">Pendentes</p>
+          <div className="flex items-center justify-between mt-2">
+            <span className="text-2xl font-bold text-amber-600">
+              {pendingExpenseTotal.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+            </span>
+            <span className="text-xs px-2 py-1 rounded-full bg-amber-100 text-amber-700 border border-amber-200">{pendingTransactions.length} itens</span>
+          </div>
+          <p className="text-[11px] text-slate-500 mt-1">Compras em cartão ou futuras</p>
+        </div>
+        <div className="p-4 rounded-2xl bg-white border border-slate-100 shadow-sm">
+          <p className="text-xs font-semibold text-slate-500 uppercase">Pagas / Confirmadas</p>
+          <div className="flex items-center justify-between mt-2">
+            <span className="text-2xl font-bold text-emerald-600">
+              {paidTotal.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+            </span>
+            <span className="text-xs px-2 py-1 rounded-full bg-emerald-100 text-emerald-700 border border-emerald-200">Liquidadas</span>
+          </div>
+          <p className="text-[11px] text-slate-500 mt-1">Valores já pagos/recebidos</p>
+        </div>
+        <div className="p-4 rounded-2xl bg-gradient-to-r from-indigo-500 to-indigo-700 text-white shadow-lg">
+          <p className="text-xs font-semibold uppercase opacity-80">Visão rápida</p>
+          <div className="flex items-center justify-between mt-2">
+            <span className="text-2xl font-bold">Organize por status</span>
+            <Clock3 size={20} className="opacity-80" />
+          </div>
+          <p className="text-xs opacity-90 mt-1">Use os filtros abaixo para ver apenas pendentes ou pagos.</p>
         </div>
       </div>
 
@@ -262,7 +342,7 @@ export const TransactionManager: React.FC<TransactionManagerProps> = ({ transact
               Filtros rápidos
             </div>
             <button
-              onClick={() => { setSelectedMonth('all'); setSelectedYear('all'); setSearchTerm(''); }}
+              onClick={() => { setSelectedMonth('all'); setSelectedYear('all'); setSearchTerm(''); setStatusFilter('all'); }}
               className="text-xs font-semibold text-indigo-700 hover:underline"
             >
               Limpar filtros
@@ -305,7 +385,66 @@ export const TransactionManager: React.FC<TransactionManagerProps> = ({ transact
               </select>
             </div>
           </div>
+
+          <div className="flex flex-wrap gap-2">
+            {[
+              { key: 'all', label: 'Todas' },
+              { key: 'pending', label: 'Pendentes' },
+              { key: 'paid', label: 'Pagas' },
+            ].map((tab) => (
+              <button
+                key={tab.key}
+                onClick={() => setStatusFilter(tab.key as 'all' | 'pending' | 'paid')}
+                className={`px-3 py-1.5 rounded-full text-sm font-semibold transition-all border ${
+                  statusFilter === tab.key
+                    ? 'bg-indigo-600 text-white border-indigo-600 shadow-md'
+                    : 'bg-white text-slate-600 border-slate-200 hover:border-indigo-200'
+                }`}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
         </div>
+      </div>
+
+      {/* Pending overview */}
+      <div className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm">
+        <div className="flex items-center justify-between mb-3">
+          <div>
+            <p className="text-xs uppercase font-semibold text-slate-500">Valores pendentes</p>
+            <h3 className="text-lg font-bold text-slate-800">Compras no cartão e parcelas futuras</h3>
+          </div>
+          <span className="text-sm font-semibold text-amber-700 bg-amber-100 px-3 py-1 rounded-full border border-amber-200">
+            {pendingTransactions.length} itens
+          </span>
+        </div>
+
+        {pendingTransactions.length === 0 ? (
+          <p className="text-sm text-slate-500">Nenhuma pendência no momento.</p>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            {pendingTransactions.slice(0, 6).map((t) => (
+              <div key={t.id} className="p-3 rounded-xl border border-slate-100 bg-gradient-to-r from-amber-50 to-white flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-semibold text-slate-800">{t.description}</p>
+                  <p className="text-xs text-slate-500">
+                    {new Date(t.date).toLocaleDateString('pt-BR')} • {t.category} • {paymentLabels[t.paymentMethod as PaymentMethod] || t.paymentMethod}
+                  </p>
+                </div>
+                <div className="text-right">
+                  <p className="text-base font-bold text-amber-700">
+                    {t.type === TransactionType.EXPENSE ? '-' : '+'}
+                    {t.amount.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                  </p>
+                  {t.isInstallment && (
+                    <p className="text-[11px] text-slate-500">Parcela {t.installmentCurrent}/{t.installmentTotal}</p>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* List */}
@@ -336,6 +475,10 @@ export const TransactionManager: React.FC<TransactionManagerProps> = ({ transact
                 </td>
                 <td className="py-4 px-6">
                   <div className="flex flex-col gap-1">
+                    <span className={`inline-flex w-fit items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold ${statusLabels[(t.status || 'PENDING') as PaymentStatus]?.color || 'bg-slate-100 text-slate-700'}`}>
+                      {(t.status || 'PENDING') === 'PENDING' ? <Clock3 size={12} /> : <CheckCircle2 size={12} />}
+                      {statusLabels[(t.status || 'PENDING') as PaymentStatus]?.label || 'Status'}
+                    </span>
                     <span className="inline-flex w-fit items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-slate-100 text-slate-800">
                       {t.category}
                     </span>
@@ -449,6 +592,17 @@ export const TransactionManager: React.FC<TransactionManagerProps> = ({ transact
                   {type === TransactionType.EXPENSE && selectedCardId && (
                     <p className="text-[10px] text-slate-500 mt-1">Cartão selecionado define o meio de pagamento.</p>
                   )}
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Status do pagamento</label>
+                  <select
+                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
+                    value={status}
+                    onChange={(e) => setStatus(e.target.value as PaymentStatus)}
+                  >
+                    <option value="PENDING">Pendente</option>
+                    <option value="PAID">Pago</option>
+                  </select>
                 </div>
                 {type === TransactionType.EXPENSE && (
                   <div>
