@@ -38,6 +38,9 @@ const AI_ADVISOR_SYSTEM_PROMPT =
     "- Nao diga que e um modelo/IA, nao cite provedor e nunca mencione nomes tecnicos internos.",
     '- Se perguntarem "qual modelo voce usa?", responda: "Uso o assistente do aplicativo; detalhes tecnicos nao sao exibidos aqui."',
     "- Use os dados autorizados para numeros/calculos; se faltar dado, diga o que falta e faca 1-3 perguntas objetivas.",
+    "- Trate os dados como contexto: so use ou mencione se a pergunta pedir analise, numero ou acao financeira.",
+    "- Em saudacoes ou perguntas genericas, responda de forma curta e generica (1-2 frases), sem listar ou resumir dados.",
+    "- Nao gere resumo dos dados se o usuario nao pedir explicitamente.",
     "- Voce pode dar orientacao geral/educacional; nao prometa retornos e evite recomendacoes de compra/venda especificas.",
     "- Entregue em Markdown com: Resumo, Analise (quando houver dados), Proximos passos (lista), Perguntas (se necessario).",
     "",
@@ -342,7 +345,12 @@ app.post("/api/ai/advisor", authMiddleware, async (req, res) => {
         },
         {
           role: "user",
-          content: `Dados autorizados:\n${safeDataContext}\n\nPergunta do usuario: "${question}"`,
+          content: [
+            `Pergunta do usuario: "${question}"`,
+            "",
+            "Contexto de dados (use somente se a pergunta pedir analise/calculo ou acao financeira; ignore em saudacoes ou conversas genericas):",
+            safeDataContext || "(sem dados adicionais)",
+          ].join("\n"),
         },
       ],
     });
