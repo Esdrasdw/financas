@@ -16,7 +16,7 @@ interface Message {
 
 export const SmartAdvisor: React.FC<SmartAdvisorProps> = ({ transactions, investments }) => {
   const [messages, setMessages] = useState<Message[]>([
-    { role: 'ai', content: 'Ola! Sou seu assistente financeiro com GPT-5 Nano. Escolha no icone de engrenagem quais dados deseja compartilhar.' }
+    { role: 'ai', content: 'Ola! Sou seu assistente financeiro. Escolha no icone de engrenagem quais dados deseja compartilhar.' }
   ]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -61,7 +61,7 @@ export const SmartAdvisor: React.FC<SmartAdvisorProps> = ({ transactions, invest
       <div className="p-4 border-b border-slate-100 bg-slate-50 flex items-center justify-between">
         <div className="flex items-center gap-2">
           <Sparkles className="text-indigo-600 w-5 h-5" />
-          <h2 className="font-bold text-slate-800">Advisor GPT-5</h2>
+          <h2 className="font-bold text-slate-800">Consultor Financeiro</h2>
         </div>
         <button 
           onClick={() => setIsSettingsOpen(true)}
@@ -129,7 +129,7 @@ export const SmartAdvisor: React.FC<SmartAdvisorProps> = ({ transactions, invest
             </div>
             <div className="p-6 space-y-4">
               <p className="text-sm text-slate-500 mb-4">
-                Controle exatamente o que o GPT pode analisar para gerar suas respostas.
+                Controle exatamente o que o assistente pode analisar para gerar suas respostas.
               </p>
               
               <label className="flex items-center justify-between p-3 border rounded-xl cursor-pointer hover:bg-slate-50">

@@ -1,8 +1,30 @@
-import { Transaction, Investment, AIPreferences, AIInsight } from "../types";
+import { Transaction, Investment, AIPreferences, AIInsight, TransactionType } from "../types";
 import { apiRequest } from "./api";
 
 type InsightResponse = AIInsight;
 type AdvisorResponse = { answer: string };
+
+const computeSummary = (transactions: Transaction[], investments: Investment[]) => {
+  const income = transactions.filter((t) => t.type === TransactionType.INCOME).reduce((acc, t) => acc + t.amount, 0);
+  const expense = transactions.filter((t) => t.type === TransactionType.EXPENSE).reduce((acc, t) => acc + t.amount, 0);
+  const balance = income - expense;
+  const investmentTotal = investments.reduce((acc, i) => acc + i.amount, 0);
+  const netWorth = balance + investmentTotal;
+
+  const dates = transactions.map((t) => t.date).filter(Boolean).sort();
+  const periodStart = dates[0];
+  const periodEnd = dates[dates.length - 1];
+
+  return {
+    periodStart,
+    periodEnd,
+    income,
+    expense,
+    balance,
+    investmentTotal,
+    netWorth,
+  };
+};
 
 export const analyzeFinances = async (
   transactions: Transaction[],
@@ -10,6 +32,11 @@ export const analyzeFinances = async (
   preferences: AIPreferences
 ): Promise<AIInsight> => {
   let context = "";
+
+  if (preferences.shareBalance) {
+    const summary = computeSummary(transactions, investments);
+    context += `Resumo (se autorizado):\n${JSON.stringify(summary)}\n\n`;
+  }
 
   if (preferences.shareTransactions) {
     const summary = transactions
@@ -43,7 +70,7 @@ export const analyzeFinances = async (
     console.error("Erro ao analisar financas:", error);
     return {
       title: "Erro na Analise",
-      message: "Nao foi possivel conectar ao assistente GPT-5 Nano no momento.",
+      message: "Nao foi possivel conectar ao assistente financeiro no momento.",
       type: "info",
     };
   }
@@ -57,6 +84,11 @@ export const askFinancialAdvisor = async (
 ) => {
   let dataContext = "";
 
+  if (preferences.shareBalance) {
+    const summary = computeSummary(transactions, investments);
+    dataContext += `RESUMO_GERAL: ${JSON.stringify(summary)}\n`;
+  }
+
   if (preferences.shareTransactions) {
     dataContext += `TRANSACOES RECENTES: ${JSON.stringify(transactions.slice(0, 50))}\n`;
   }
@@ -65,9 +97,8 @@ export const askFinancialAdvisor = async (
     dataContext += `INVESTIMENTOS: ${JSON.stringify(investments)}\n`;
   }
 
-  if (preferences.shareBalance) {
-    dataContext += "O usuario permitiu analise de saldo geral.\n";
-  }
+  dataContext +=
+    "Observacoes: Valores em BRL (R$). TRANSACOES seguem {date, description, amount, type, category, recurrence, cardId?}. INVESTIMENTOS seguem {name, amount, type, percentageOfCDI, startDate}.\n";
 
   const response = await apiRequest<AdvisorResponse>("/ai/advisor", {
     method: "POST",

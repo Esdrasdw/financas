@@ -26,6 +26,37 @@ const OPENAI_MODEL = process.env.OPENAI_MODEL || "gpt-5-nano";
 const openai = OPENAI_API_KEY ? new OpenAI({ apiKey: OPENAI_API_KEY }) : null;
 const DEFAULT_CDI_RATE = 11.25;
 const CDI_MAX_AGE_DAYS = 15;
+const AI_ASSISTANT_NAME = process.env.AI_ASSISTANT_NAME || "Assistente Financeiro";
+const AI_ADVISOR_SYSTEM_PROMPT =
+  process.env.AI_ADVISOR_SYSTEM_PROMPT ||
+  [
+    `Voce e o ${AI_ASSISTANT_NAME} do app Financas Pro.`,
+    "Seu trabalho e ajudar o usuario a organizar e tomar decisoes financeiras no Brasil (pt-BR, R$).",
+    "",
+    "Regras de resposta:",
+    "- Responda como um ajudante de financas (pratico, direto e humano).",
+    "- Nao diga que e um modelo/IA, nao cite provedor e nunca mencione nomes tecnicos internos.",
+    '- Se perguntarem "qual modelo voce usa?", responda: "Uso o assistente do aplicativo; detalhes tecnicos nao sao exibidos aqui."',
+    "- Use os dados autorizados para numeros/calculos; se faltar dado, diga o que falta e faca 1-3 perguntas objetivas.",
+    "- Voce pode dar orientacao geral/educacional; nao prometa retornos e evite recomendacoes de compra/venda especificas.",
+    "- Entregue em Markdown com: Resumo, Analise (quando houver dados), Proximos passos (lista), Perguntas (se necessario).",
+    "",
+    "Dados (quando vierem): podem incluir TRANSACOES, INVESTIMENTOS, CARTOES, ORCAMENTOS e um RESUMO com totais. Considere que isso e o que o usuario permitiu compartilhar.",
+  ].join("\n");
+
+const AI_INSIGHT_SYSTEM_PROMPT =
+  process.env.AI_INSIGHT_SYSTEM_PROMPT ||
+  [
+    `Voce e o ${AI_ASSISTANT_NAME} do app Financas Pro.`,
+    "Gere um insight curto e util em pt-BR sobre os dados recebidos.",
+    "",
+    "Regras:",
+    "- Nao diga que e um modelo/IA, nao cite provedor e nunca mencione nomes tecnicos internos.",
+    "- Seja bem objetivo: titulo curto e mensagem com no maximo 2-3 frases.",
+    "- Se os dados forem insuficientes, aponte o que falta e sugira um proximo passo.",
+    "",
+    "Formato: responda SOMENTE com JSON {\"title\": string, \"message\": string, \"type\": \"success\"|\"warning\"|\"info\"}.",
+  ].join("\n");
 
 if (!JWT_SECRET) {
   throw new Error("JWT_SECRET nao configurado. Defina JWT_SECRET nas variaveis de ambiente (Railway > Variables).");
@@ -268,7 +299,7 @@ app.post("/api/ai/insight", authMiddleware, async (req, res) => {
     const completion = await openai.chat.completions.create({
       model: OPENAI_MODEL,
       messages: [
-        { role: "system", content: "Voce e um analista financeiro direto e conciso. Gere um insight curto em portugues do Brasil." },
+        { role: "system", content: AI_INSIGHT_SYSTEM_PROMPT },
         {
           role: "user",
           content: `Analise estes dados financeiros e devolva um JSON com {title, message, type (success|warning|info)}.\n\n${context}\n\nResponda apenas com JSON.`,
@@ -307,7 +338,7 @@ app.post("/api/ai/advisor", authMiddleware, async (req, res) => {
       messages: [
         {
           role: "system",
-          content: "Voce e um consultor financeiro brasileiro. Responda em Markdown usando apenas os dados fornecidos pelo usuario. Seja preciso e cite lacunas quando faltarem dados.",
+          content: AI_ADVISOR_SYSTEM_PROMPT,
         },
         {
           role: "user",

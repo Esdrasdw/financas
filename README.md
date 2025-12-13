@@ -10,8 +10,8 @@
 
 1. Instale as dependencias: `npm install`
 2. (Opcional) Crie um arquivo `.env.local` (nao vai para o Git) com:
-   - `OPENAI_API_KEY=SUACHAVEAQUI` (para habilitar o Advisor/Insights com GPT-5 Nano)
-   - `OPENAI_MODEL=gpt-5-nano` (padrao)
+   - `OPENAI_API_KEY=SUACHAVEAQUI` (para habilitar o Advisor/Insights)
+   - `OPENAI_MODEL=...` (opcional; se voce quiser fixar um modelo)
    - `JWT_SECRET=um-segredo-bem-grande` (recomendado)
    - `DATA_DIR=./data` (ou um caminho/volume persistente)
 3. Inicie a API: `npm run server`
@@ -31,7 +31,7 @@ Credenciais de demonstracao: `demo@financas.com / 123456`
 2. Em **Variables**, configure:
    - `JWT_SECRET` (obrigatorio)
    - `OPENAI_API_KEY` (opcional, mas necessario para a IA)
-   - `OPENAI_MODEL` (padrao `gpt-5-nano`)
+   - `OPENAI_MODEL` (opcional)
    - `DATA_DIR=/data` (aponta para volume persistente; o codigo ja usa /data por padrao no Railway)
 3. Em **Volumes**, crie um volume e monte em `/data` para persistir `data/db.json` entre deploys.
 4. Faca o deploy. O Railway injeta `PORT` automaticamente.

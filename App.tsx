@@ -419,7 +419,7 @@ const App: React.FC = () => {
               <Lightbulb size={20} />
             </div>
             <div>
-              <h4 className="font-bold text-sm mb-1">Dica do GPT: {dailyInsight.title}</h4>
+              <h4 className="font-bold text-sm mb-1">Dica do Assistente: {dailyInsight.title}</h4>
               <p className="text-sm opacity-90">{dailyInsight.message}</p>
             </div>
           </div>
