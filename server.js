@@ -165,7 +165,6 @@ async function fetchCdiFromOpenAI(previousRate) {
         content: `Qual o CDI anual mais recente divulgado pelo mercado brasileiro? Retorne apenas o numero decimal. Taxa anterior conhecida: ${previousRate ?? "desconhecida"}.`,
       },
     ],
-    temperature: 0,
   });
 
   const text = completion.choices?.[0]?.message?.content || "";
@@ -275,7 +274,6 @@ app.post("/api/ai/insight", authMiddleware, async (req, res) => {
           content: `Analise estes dados financeiros e devolva um JSON com {title, message, type (success|warning|info)}.\n\n${context}\n\nResponda apenas com JSON.`,
         },
       ],
-      temperature: 0.3,
       response_format: { type: "json_object" },
     });
     const content = completion.choices?.[0]?.message?.content || "{}";
@@ -316,7 +314,6 @@ app.post("/api/ai/advisor", authMiddleware, async (req, res) => {
           content: `Dados autorizados:\n${safeDataContext}\n\nPergunta do usuario: "${question}"`,
         },
       ],
-      temperature: 0.35,
     });
 
     return res.json({ answer: completion.choices?.[0]?.message?.content || "" });
