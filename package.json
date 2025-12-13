@@ -17,8 +17,10 @@
     "jsonwebtoken": "^9.0.2",
     "lucide-react": "^0.560.0",
     "openai": "^4.83.0",
+    "pdf-parse": "^1.1.4",
     "react": "^19.2.3",
     "react-dom": "^19.2.3",
+    "react-is": "^18.3.1",
     "react-markdown": "^10.1.0",
     "recharts": "^3.5.1"
   },

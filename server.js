@@ -8,6 +8,7 @@ import { fileURLToPath } from "url";
 import jwt from "jsonwebtoken";
 import bcrypt from "bcryptjs";
 import OpenAI from "openai";
+import pdfParse from "pdf-parse";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -61,6 +62,20 @@ const AI_INSIGHT_SYSTEM_PROMPT =
     "Formato: responda SOMENTE com JSON {\"title\": string, \"message\": string, \"type\": \"success\"|\"warning\"|\"info\"}.",
   ].join("\n");
 
+const AI_IMPORT_SYSTEM_PROMPT =
+  process.env.AI_IMPORT_SYSTEM_PROMPT ||
+  [
+    "Voce ajuda a transformar extratos, faturas, holerites ou planilhas em lancamentos financeiros.",
+    "Leia o texto enviado e responda apenas com JSON no formato {\"transactions\": Array<Transacao>}",
+    "Transacao: {description: string, amount: number, type: \"INCOME\"|\"EXPENSE\", category?: string, date?: string}",
+    "Regras:",
+    "- Nao responda com nada alem do JSON; nao inclua markdown.",
+    "- Se nao houver data, use a data de referencia fornecida pelo sistema.",
+    "- Use INCOME para salarios, recebimentos, reembolsos ou entradas; EXPENSE para faturas, boletos, impostos ou compras.",
+    "- Categorize de forma simples: Salario, Moradia, Alimentacao, Transporte, Lazer, Investimentos, Impostos, Taxas, Compras, Outros.",
+    "- Se o arquivo for um resumo geral (ex: limite do cartao), ignore e retorne lista vazia.",
+  ].join("\n");
+
 if (!JWT_SECRET) {
   throw new Error("JWT_SECRET nao configurado. Defina JWT_SECRET nas variaveis de ambiente (Railway > Variables).");
 }
@@ -75,13 +90,17 @@ const demoTransactions = [
 const demoCards = [{ id: "c1", name: "Nubank", limit: 5000, dueDay: 10, closingDay: 3, color: "bg-purple-600" }];
 const demoInvestments = [{ id: "i1", name: "Tesouro Selic", amount: 2000, type: "TESOURO", percentageOfCDI: 100, startDate: "2024-01-02" }];
 const demoBudgets = [{ id: "b1", category: "Alimentacao", limit: 800 }];
+const demoGoals = [
+  { id: "g1", title: "Reserva de Emergencia", target: 15000, current: 4500, deadline: "2025-12-31", category: "Seguranca" },
+  { id: "g2", title: "Viagem", target: 8000, current: 2500, deadline: "2025-06-30", category: "Lazer" },
+];
 
 const app = express();
 app.disable("x-powered-by");
 
 const corsOrigin = process.env.CORS_ORIGIN?.split(",").map((o) => o.trim()).filter(Boolean);
 app.use(cors(corsOrigin?.length ? { origin: corsOrigin } : { origin: true }));
-app.use(express.json({ limit: "1mb" }));
+app.use(express.json({ limit: "10mb" }));
 
 async function loadDB() {
   await fs.mkdir(DATA_DIR, { recursive: true });
@@ -115,6 +134,7 @@ function createSeed() {
         cards: demoCards,
         investments: demoInvestments,
         budgets: demoBudgets,
+        goals: demoGoals,
       },
     },
     meta: createDefaultMeta(),
@@ -137,6 +157,11 @@ function ensureDbShape(db) {
   normalized.finances = normalized.finances || {};
   normalized.meta = normalized.meta || createDefaultMeta();
 
+  Object.keys(normalized.finances).forEach((userId) => {
+    const defaults = { transactions: [], cards: [], investments: [], budgets: [], goals: [] };
+    normalized.finances[userId] = { ...defaults, ...(normalized.finances[userId] || {}) };
+  });
+
   if (!normalized.meta.cdiRate || Number.isNaN(Number(normalized.meta.cdiRate.value))) {
     normalized.meta.cdiRate = createDefaultMeta().cdiRate;
   }
@@ -145,8 +170,11 @@ function ensureDbShape(db) {
 }
 
 function ensureFinances(db, userId) {
+  const defaults = { transactions: [], cards: [], investments: [], budgets: [], goals: [] };
   if (!db.finances[userId]) {
-    db.finances[userId] = { transactions: [], cards: [], investments: [], budgets: [] };
+    db.finances[userId] = { ...defaults };
+  } else {
+    db.finances[userId] = { ...defaults, ...db.finances[userId] };
   }
   return db.finances[userId];
 }
@@ -367,6 +395,99 @@ app.post("/api/ai/advisor", authMiddleware, async (req, res) => {
   }
 });
 
+app.post("/api/ai/import-transactions", authMiddleware, async (req, res) => {
+  if (!openai) {
+    return res.status(503).json({ message: "OPENAI_API_KEY nao configurado no servidor" });
+  }
+
+  const { fileName, fileBase64, instructions } = req.body || {};
+  if (!fileName || !fileBase64) {
+    return res.status(400).json({ message: "Envie fileName e fileBase64 (base64 do arquivo)" });
+  }
+
+  let buffer;
+  try {
+    const cleaned = String(fileBase64).replace(/^data:.*;base64,/, "");
+    buffer = Buffer.from(cleaned, "base64");
+  } catch (error) {
+    return res.status(400).json({ message: "Nao foi possivel ler o arquivo enviado" });
+  }
+
+  if (!buffer?.length) {
+    return res.status(400).json({ message: "Arquivo vazio" });
+  }
+
+  const extension = path.extname(String(fileName)).toLowerCase();
+  let extractedText = "";
+  try {
+    if (extension === ".pdf") {
+      const parsed = await pdfParse(buffer);
+      extractedText = parsed?.text || "";
+    } else {
+      extractedText = buffer.toString("utf-8");
+    }
+  } catch (error) {
+    console.error("Erro ao extrair arquivo enviado:", error);
+    extractedText = buffer.toString("utf-8");
+  }
+
+  const safeText = (extractedText || "").trim();
+  if (!safeText) {
+    return res.status(400).json({ message: "Nao foi possivel ler o conteudo do arquivo" });
+  }
+
+  const referenceDate = new Date().toISOString().split("T")[0];
+  const truncatedText = safeText.slice(0, 15000);
+  const instructionsText = (instructions || "").toString().trim() || "Sem instrucoes adicionais";
+
+  try {
+    const completion = await openai.chat.completions.create({
+      model: OPENAI_MODEL,
+      messages: [
+        { role: "system", content: AI_IMPORT_SYSTEM_PROMPT },
+        {
+          role: "user",
+          content: [
+            `Arquivo: ${fileName}`,
+            `Data de referencia (para lancamentos sem data explicita): ${referenceDate}`,
+            `Instrucoes do usuario: ${instructionsText}`,
+            "",
+            "Conteudo lido (pode estar resumido):",
+            truncatedText,
+          ].join("\n"),
+        },
+      ],
+      response_format: { type: "json_object" },
+    });
+
+    const content = completion.choices?.[0]?.message?.content || "{}";
+    let parsed;
+    try {
+      parsed = JSON.parse(content);
+    } catch (error) {
+      parsed = {};
+    }
+
+    const rawTransactions = Array.isArray(parsed.transactions) ? parsed.transactions : [];
+    const normalized = rawTransactions.map((tx) => normalizeTransaction({ ...tx, date: tx.date || referenceDate }));
+
+    const db = await loadDB();
+    const finances = ensureFinances(db, req.userId);
+    finances.transactions = [...normalized, ...finances.transactions];
+    db.finances[req.userId] = finances;
+    await saveDB(db);
+
+    return res.status(201).json({
+      transactions: normalized,
+      preview: truncatedText.slice(0, 800),
+      usedInstructions: instructionsText,
+    });
+  } catch (error) {
+    console.error("Erro ao importar transacoes via IA:", error);
+    return res.status(500).json({ message: "Nao foi possivel processar o arquivo no momento." });
+  }
+});
+
 app.post("/api/auth/register", async (req, res) => {
   const { email, password, name } = req.body || {};
   if (!email || !password || !name) {
@@ -383,7 +504,13 @@ app.post("/api/auth/register", async (req, res) => {
   const passwordHash = await bcrypt.hash(password, 10);
   const user = { id: userId, email: email.toLowerCase(), name, passwordHash };
   db.users.push(user);
-  db.finances[userId] = { transactions: [...demoTransactions], cards: [...demoCards], investments: [...demoInvestments], budgets: [...demoBudgets] };
+  db.finances[userId] = {
+    transactions: [...demoTransactions],
+    cards: [...demoCards],
+    investments: [...demoInvestments],
+    budgets: [...demoBudgets],
+    goals: [...demoGoals],
+  };
   await saveDB(db);
 
   const token = signToken(userId);
@@ -531,6 +658,41 @@ app.delete("/api/budgets/:id", authMiddleware, async (req, res) => {
   return res.status(204).end();
 });
 
+app.post("/api/goals", authMiddleware, async (req, res) => {
+  const db = await loadDB();
+  const finances = ensureFinances(db, req.userId);
+  const goal = normalizeGoal(req.body || {});
+  finances.goals = [...finances.goals, goal];
+  db.finances[req.userId] = finances;
+  await saveDB(db);
+  return res.status(201).json({ goal });
+});
+
+app.put("/api/goals/:id", authMiddleware, async (req, res) => {
+  const { id } = req.params;
+  const db = await loadDB();
+  const finances = ensureFinances(db, req.userId);
+  const index = finances.goals.findIndex((g) => g.id === id);
+  if (index === -1) {
+    return res.status(404).json({ message: "Meta nao encontrada" });
+  }
+  const goal = normalizeGoal({ ...finances.goals[index], ...req.body, id });
+  finances.goals[index] = goal;
+  db.finances[req.userId] = finances;
+  await saveDB(db);
+  return res.json({ goal });
+});
+
+app.delete("/api/goals/:id", authMiddleware, async (req, res) => {
+  const { id } = req.params;
+  const db = await loadDB();
+  const finances = ensureFinances(db, req.userId);
+  finances.goals = finances.goals.filter((g) => g.id !== id);
+  db.finances[req.userId] = finances;
+  await saveDB(db);
+  return res.status(204).end();
+});
+
 const DIST_DIR = path.join(__dirname, "dist");
 const DIST_INDEX = path.join(DIST_DIR, "index.html");
 if (existsSync(DIST_DIR) && existsSync(DIST_INDEX)) {
@@ -581,6 +743,17 @@ function normalizeBudget(input) {
     id: input.id || randomUUID(),
     category: input.category || "Geral",
     limit: Number(input.limit) || 0,
+  };
+}
+
+function normalizeGoal(input) {
+  return {
+    id: input.id || randomUUID(),
+    title: input.title || "Nova meta",
+    target: Number(input.target) || 0,
+    current: Number(input.current) || 0,
+    deadline: input.deadline || "",
+    category: input.category || "Geral",
   };
 }
 

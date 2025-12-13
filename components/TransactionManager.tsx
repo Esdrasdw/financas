@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Transaction, TransactionType, CreditCard, RecurrenceType } from '../types';
-import { Plus, Trash2, Search, ArrowUpCircle, ArrowDownCircle, CreditCard as CardIcon, CalendarClock, Repeat, Download } from 'lucide-react';
+import { Plus, Trash2, Search, ArrowUpCircle, ArrowDownCircle, CreditCard as CardIcon, CalendarClock, Repeat, Download, FileUp, Wand2 } from 'lucide-react';
 import { getNextCardDueDate } from '../services/marketService';
 
 interface TransactionManagerProps {
@@ -8,9 +8,10 @@ interface TransactionManagerProps {
   cards: CreditCard[];
   onAdd: (transactions: Omit<Transaction, 'id'>[]) => void; // Modified to accept array
   onDelete: (id: string) => void;
+  onImportFromFile: (file: File, instructions?: string) => Promise<void>;
 }
 
-export const TransactionManager: React.FC<TransactionManagerProps> = ({ transactions, cards, onAdd, onDelete }) => {
+export const TransactionManager: React.FC<TransactionManagerProps> = ({ transactions, cards, onAdd, onDelete, onImportFromFile }) => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   
@@ -27,6 +28,10 @@ export const TransactionManager: React.FC<TransactionManagerProps> = ({ transact
   const [totalInstallments, setTotalInstallments] = useState(2);
   const [paidInstallments, setPaidInstallments] = useState(0);
   const [selectedCardId, setSelectedCardId] = useState('');
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [importNotes, setImportNotes] = useState('');
+  const [isImporting, setIsImporting] = useState(false);
+  const [importFeedback, setImportFeedback] = useState<string | null>(null);
 
   // Update date if card selected
   useEffect(() => {
@@ -109,6 +114,30 @@ export const TransactionManager: React.FC<TransactionManagerProps> = ({ transact
     t.category.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    setSelectedFile(file || null);
+  };
+
+  const handleImport = async () => {
+    if (!selectedFile) {
+      setImportFeedback('Selecione um arquivo primeiro.');
+      return;
+    }
+    setIsImporting(true);
+    setImportFeedback(null);
+    try {
+      await onImportFromFile(selectedFile, importNotes);
+      setImportFeedback('Transacoes criadas automaticamente com a IA.');
+      setSelectedFile(null);
+      setImportNotes('');
+    } catch (error: any) {
+      setImportFeedback(error?.message || 'Nao foi possivel importar agora.');
+    } finally {
+      setIsImporting(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
@@ -129,6 +158,48 @@ export const TransactionManager: React.FC<TransactionManagerProps> = ({ transact
             <Plus size={20} />
             Nova Transação
           </button>
+        </div>
+      </div>
+
+      <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-100 space-y-3">
+        <div className="flex items-start gap-3">
+          <div className="p-2 rounded-lg bg-indigo-50 text-indigo-600">
+            <Wand2 size={18} />
+          </div>
+          <div className="flex-1 space-y-2">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+              <div>
+                <p className="text-sm font-semibold text-slate-800">Importar com IA (PDF, CSV, TXT)</p>
+                <p className="text-xs text-slate-500">Envie fatura, holerite ou extrato para virar transacoes automaticamente.</p>
+              </div>
+              <span className="text-[11px] text-slate-500">Data padrao: hoje</span>
+            </div>
+
+            <div className="flex flex-col md:flex-row gap-2">
+              <label className="flex-1 border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-700 bg-slate-50 cursor-pointer hover:border-indigo-500 transition-colors">
+                <div className="flex items-center gap-2">
+                  <FileUp size={16} />
+                  <span className="truncate">{selectedFile ? selectedFile.name : 'Selecione um arquivo (PDF, CSV, TXT, OFX)'}</span>
+                </div>
+                <input type="file" accept=".pdf,.txt,.csv,.ofx" className="hidden" onChange={handleFileChange} />
+              </label>
+              <input 
+                type="text" 
+                className="flex-1 px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500 text-sm"
+                placeholder="Instrucoes para a IA (ex: salario de dez/2024 ou fatura nubank)"
+                value={importNotes}
+                onChange={(e) => setImportNotes(e.target.value)}
+              />
+              <button
+                onClick={handleImport}
+                disabled={isImporting}
+                className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-semibold hover:bg-indigo-700 transition-colors disabled:opacity-60"
+              >
+                {isImporting ? 'Enviando...' : 'Importar IA'}
+              </button>
+            </div>
+            {importFeedback && <p className="text-xs text-amber-700">{importFeedback}</p>}
+          </div>
         </div>
       </div>
 

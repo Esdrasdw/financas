@@ -11,6 +11,7 @@ import {
   Budget,
   User,
   FinanceDataset,
+  Goal,
 } from "./types";
 import { Sidebar } from "./components/Sidebar";
 import { Dashboard } from "./components/Dashboard";
@@ -28,7 +29,7 @@ import { analyzeFinances } from "./services/openaiService";
 import { api } from "./services/api";
 import { Menu, Lightbulb, X, Bell, LogOut } from "lucide-react";
 
-const EMPTY_DATA: FinanceDataset = { transactions: [], cards: [], investments: [], budgets: [] };
+const EMPTY_DATA: FinanceDataset = { transactions: [], cards: [], investments: [], budgets: [], goals: [] };
 
 const App: React.FC = () => {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -37,6 +38,7 @@ const App: React.FC = () => {
   const [cards, setCards] = useState<CreditCardType[]>([]);
   const [investments, setInvestments] = useState<Investment[]>([]);
   const [budgets, setBudgets] = useState<Budget[]>([]);
+  const [goals, setGoals] = useState<Goal[]>([]);
 
   const [currentView, setCurrentView] = useState<ViewState>("dashboard");
   const [summary, setSummary] = useState<FinancialSummary>({
@@ -68,6 +70,7 @@ const App: React.FC = () => {
     setCards(data.cards || []);
     setInvestments(data.investments || []);
     setBudgets(data.budgets || []);
+    setGoals(data.goals || []);
   };
 
   // Calculate Summary & Health Score
@@ -232,12 +235,55 @@ const App: React.FC = () => {
     }
   };
 
+  const addGoal = async (goal: Omit<Goal, "id">) => {
+    try {
+      const { goal: saved } = await api.addGoal(goal);
+      setGoals((prev) => [...prev, saved]);
+    } catch (error: any) {
+      const fallback = { ...goal, id: buildId() };
+      setGoals((prev) => [...prev, fallback]);
+      setGlobalError(error?.message || "Meta salva apenas localmente.");
+    }
+  };
+
+  const updateGoal = async (goal: Goal) => {
+    setGoals((prev) => prev.map((g) => (g.id === goal.id ? goal : g)));
+    try {
+      const { goal: saved } = await api.updateGoal(goal);
+      setGoals((prev) => prev.map((g) => (g.id === goal.id ? saved : g)));
+    } catch (error: any) {
+      setGlobalError(error?.message || "Falha ao sincronizar meta.");
+    }
+  };
+
+  const deleteGoal = async (id: string) => {
+    setGoals((prev) => prev.filter((g) => g.id !== id));
+    try {
+      await api.deleteGoal(id);
+    } catch (error: any) {
+      setGlobalError(error?.message || "Erro ao remover meta no servidor.");
+    }
+  };
+
+  const importTransactionsFromFile = async (file: File, instructions?: string) => {
+    const { transactions: imported } = await api.importTransactionsFromFile(file, instructions);
+    setTransactions((prev) => [...imported, ...prev]);
+  };
+
   const renderContent = () => {
     switch (currentView) {
       case "dashboard":
         return <Dashboard transactions={transactions} investments={investments} summary={summary} />;
       case "transactions":
-        return <TransactionManager transactions={transactions} cards={cards} onAdd={addTransactions} onDelete={deleteTransaction} />;
+        return (
+          <TransactionManager
+            transactions={transactions}
+            cards={cards}
+            onAdd={addTransactions}
+            onDelete={deleteTransaction}
+            onImportFromFile={importTransactionsFromFile}
+          />
+        );
       case "calendar":
         return <CalendarView transactions={transactions} />;
       case "budgets":
@@ -249,7 +295,7 @@ const App: React.FC = () => {
       case "ai-advisor":
         return <SmartAdvisor transactions={transactions} investments={investments} />;
       case "goals":
-        return <Goals />;
+        return <Goals goals={goals} onAdd={addGoal} onUpdate={updateGoal} onDelete={deleteGoal} />;
       case "tools":
         return <FinancialTools />;
       case "reports":

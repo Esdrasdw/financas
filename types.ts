@@ -49,11 +49,21 @@ export interface User {
   name: string;
 }
 
+export interface Goal {
+  id: string;
+  title: string;
+  target: number;
+  current: number;
+  deadline?: string;
+  category?: string;
+}
+
 export interface FinanceDataset {
   transactions: Transaction[];
   cards: CreditCard[];
   investments: Investment[];
   budgets: Budget[];
+  goals: Goal[];
 }
 
 export interface FinancialSummary {

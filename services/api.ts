@@ -1,4 +1,4 @@
-import { FinanceDataset, Transaction, CreditCard, Investment, Budget, User } from "../types";
+import { FinanceDataset, Transaction, CreditCard, Investment, Budget, User, Goal } from "../types";
 
 export const API_URL = import.meta.env.VITE_API_URL || "/api";
 
@@ -119,4 +119,43 @@ export const api = {
   async getCdiRate() {
     return apiRequest<{ rate: number; updatedAt: string; source: string }>("/market/cdi");
   },
+
+  async addGoal(goal: Omit<Goal, "id">) {
+    return apiRequest<{ goal: Goal }>("/goals", {
+      method: "POST",
+      body: JSON.stringify(goal),
+    });
+  },
+
+  async updateGoal(goal: Goal) {
+    return apiRequest<{ goal: Goal }>(`/goals/${goal.id}`, {
+      method: "PUT",
+      body: JSON.stringify(goal),
+    });
+  },
+
+  async deleteGoal(id: string) {
+    await apiRequest<void>(`/goals/${id}`, { method: "DELETE" });
+  },
+
+  async importTransactionsFromFile(file: File, instructions?: string) {
+    const base64 = await fileToBase64(file);
+    return apiRequest<{ transactions: Transaction[]; preview?: string; usedInstructions?: string }>("/ai/import-transactions", {
+      method: "POST",
+      body: JSON.stringify({
+        fileName: file.name,
+        fileBase64: base64,
+        instructions,
+      }),
+    });
+  },
 };
+
+function fileToBase64(file: File) {
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve((reader.result as string) || "");
+    reader.onerror = (err) => reject(err);
+    reader.readAsDataURL(file);
+  });
+}
