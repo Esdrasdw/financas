@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Transaction, Investment, AIPreferences } from '../types';
-import { askFinancialAdvisor } from '../services/geminiService';
+import { askFinancialAdvisor } from '../services/openaiService';
 import { Send, Bot, User, Sparkles, Settings, ShieldCheck, X } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 
@@ -16,7 +16,7 @@ interface Message {
 
 export const SmartAdvisor: React.FC<SmartAdvisorProps> = ({ transactions, investments }) => {
   const [messages, setMessages] = useState<Message[]>([
-    { role: 'ai', content: 'Olá! Sou seu assistente financeiro. Configure quais dados deseja compartilhar no ícone de engrenagem acima.' }
+    { role: 'ai', content: 'Ola! Sou seu assistente financeiro com GPT-5 Nano. Escolha no icone de engrenagem quais dados deseja compartilhar.' }
   ]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -61,12 +61,12 @@ export const SmartAdvisor: React.FC<SmartAdvisorProps> = ({ transactions, invest
       <div className="p-4 border-b border-slate-100 bg-slate-50 flex items-center justify-between">
         <div className="flex items-center gap-2">
           <Sparkles className="text-indigo-600 w-5 h-5" />
-          <h2 className="font-bold text-slate-800">Gemini Advisor</h2>
+          <h2 className="font-bold text-slate-800">Advisor GPT-5</h2>
         </div>
         <button 
           onClick={() => setIsSettingsOpen(true)}
           className="p-2 hover:bg-slate-200 rounded-full text-slate-500 transition-colors"
-          title="Configurações de Privacidade"
+          title="Configuracoes de Privacidade"
         >
           <Settings size={20} />
         </button>
@@ -104,7 +104,7 @@ export const SmartAdvisor: React.FC<SmartAdvisorProps> = ({ transactions, invest
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyPress={(e) => e.key === 'Enter' && handleSend()}
-          placeholder="Pergunte sobre suas finanças..."
+          placeholder="Pergunte sobre suas financas..."
           className="flex-1 bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-indigo-500"
         />
         <button 
@@ -129,7 +129,7 @@ export const SmartAdvisor: React.FC<SmartAdvisorProps> = ({ transactions, invest
             </div>
             <div className="p-6 space-y-4">
               <p className="text-sm text-slate-500 mb-4">
-                Controle exatamente o que o Gemini pode analisar para gerar suas respostas.
+                Controle exatamente o que o GPT pode analisar para gerar suas respostas.
               </p>
               
               <label className="flex items-center justify-between p-3 border rounded-xl cursor-pointer hover:bg-slate-50">
@@ -143,7 +143,7 @@ export const SmartAdvisor: React.FC<SmartAdvisorProps> = ({ transactions, invest
               </label>
 
               <label className="flex items-center justify-between p-3 border rounded-xl cursor-pointer hover:bg-slate-50">
-                <span className="text-sm font-medium text-slate-700">Ler Transações Detalhadas</span>
+                <span className="text-sm font-medium text-slate-700">Ler Transacoes Detalhadas</span>
                 <input 
                   type="checkbox" 
                   checked={preferences.shareTransactions}
@@ -166,7 +166,7 @@ export const SmartAdvisor: React.FC<SmartAdvisorProps> = ({ transactions, invest
                 onClick={() => setIsSettingsOpen(false)}
                 className="w-full bg-indigo-600 text-white font-bold py-3 rounded-lg mt-2"
               >
-                Salvar Preferências
+                Salvar Preferencias
               </button>
             </div>
           </div>

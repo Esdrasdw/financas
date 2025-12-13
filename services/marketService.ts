@@ -1,14 +1,26 @@
-// Mocking current Brazil CDI rate (approx 11.25% annually as of late 2024/2025 context)
-export const CURRENT_CDI_RATE = 11.25; 
+import { api } from "./api";
+
+export const DEFAULT_CDI_RATE = 11.25; 
+
+export const getCurrentCdiRate = async () => {
+  try {
+    const data = await api.getCdiRate();
+    return { rate: data.rate, updatedAt: data.updatedAt, source: data.source };
+  } catch (error) {
+    console.error("Erro ao consultar CDI atual:", error);
+    return { rate: DEFAULT_CDI_RATE, updatedAt: null, source: "fallback" };
+  }
+};
 
 export const calculateInvestmentReturn = (
   principal: number, 
   percentageOfCDI: number, 
-  months: number
+  months: number,
+  baseCdiRate: number = DEFAULT_CDI_RATE
 ): number => {
   // Annual to Monthly rate conversion
   // Formula: (1 + annual_rate)^(1/12) - 1
-  const annualRateDecimal = (CURRENT_CDI_RATE * (percentageOfCDI / 100)) / 100;
+  const annualRateDecimal = (baseCdiRate * (percentageOfCDI / 100)) / 100;
   const monthlyRate = Math.pow(1 + annualRateDecimal, 1 / 12) - 1;
   
   // Compound interest: P * (1 + r)^n

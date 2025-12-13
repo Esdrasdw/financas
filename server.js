@@ -7,20 +7,23 @@ import { randomUUID } from "crypto";
 import { fileURLToPath } from "url";
 import jwt from "jsonwebtoken";
 import bcrypt from "bcryptjs";
-import { GoogleGenAI, Type } from "@google/genai";
+import OpenAI from "openai";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const DATA_DIR = path.join(__dirname, "data");
+const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, "data");
 const DATA_FILE = path.join(DATA_DIR, "db.json");
 const PORT = Number(process.env.PORT) || 4000;
 const IS_RAILWAY = Boolean(process.env.RAILWAY_PROJECT_ID || process.env.RAILWAY_SERVICE_ID || process.env.RAILWAY_ENVIRONMENT);
 const IS_PRODUCTION = process.env.NODE_ENV === "production" || IS_RAILWAY;
 const JWT_SECRET = process.env.JWT_SECRET || (IS_PRODUCTION ? "" : "change-me-now");
 const TOKEN_EXPIRES_IN = process.env.JWT_EXPIRES_IN || "7d";
-const GEMINI_API_KEY = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || "";
-const gemini = GEMINI_API_KEY ? new GoogleGenAI({ apiKey: GEMINI_API_KEY }) : null;
+const OPENAI_API_KEY = process.env.OPENAI_API_KEY || "";
+const OPENAI_MODEL = process.env.OPENAI_MODEL || "gpt-5-nano";
+const openai = OPENAI_API_KEY ? new OpenAI({ apiKey: OPENAI_API_KEY }) : null;
+const DEFAULT_CDI_RATE = 11.25;
+const CDI_MAX_AGE_DAYS = 15;
 
 if (!JWT_SECRET) {
   throw new Error("JWT_SECRET nao configurado. Defina JWT_SECRET nas variaveis de ambiente (Railway > Variables).");
@@ -46,18 +49,22 @@ app.use(express.json({ limit: "1mb" }));
 
 async function loadDB() {
   await fs.mkdir(DATA_DIR, { recursive: true });
+  let db;
   try {
     const raw = await fs.readFile(DATA_FILE, "utf-8");
-    return JSON.parse(raw);
+    db = JSON.parse(raw);
   } catch (error) {
     if (error.code !== "ENOENT") throw error;
-    const seeded = createSeed();
-    await fs.writeFile(DATA_FILE, JSON.stringify(seeded, null, 2));
-    return seeded;
+    db = createSeed();
   }
+
+  const normalized = ensureDbShape(db);
+  await saveDB(normalized);
+  return normalized;
 }
 
 async function saveDB(db) {
+  await fs.mkdir(DATA_DIR, { recursive: true });
   await fs.writeFile(DATA_FILE, JSON.stringify(db, null, 2));
 }
 
@@ -74,7 +81,31 @@ function createSeed() {
         budgets: demoBudgets,
       },
     },
+    meta: createDefaultMeta(),
   };
+}
+
+function createDefaultMeta() {
+  return {
+    cdiRate: {
+      value: DEFAULT_CDI_RATE,
+      updatedAt: new Date().toISOString(),
+      source: "seed",
+    },
+  };
+}
+
+function ensureDbShape(db) {
+  const normalized = { ...db };
+  normalized.users = normalized.users || [];
+  normalized.finances = normalized.finances || {};
+  normalized.meta = normalized.meta || createDefaultMeta();
+
+  if (!normalized.meta.cdiRate || Number.isNaN(Number(normalized.meta.cdiRate.value))) {
+    normalized.meta.cdiRate = createDefaultMeta().cdiRate;
+  }
+
+  return normalized;
 }
 
 function ensureFinances(db, userId) {
@@ -88,9 +119,106 @@ function signToken(userId) {
   return jwt.sign({ userId }, JWT_SECRET, { expiresIn: TOKEN_EXPIRES_IN });
 }
 
-function readText(response) {
-  if (response?.response?.text) return response.response.text();
-  return response?.text;
+function parseNumericValue(value) {
+  if (value === undefined || value === null) return NaN;
+  return Number(String(value).replace(",", "."));
+}
+
+function getDaysBetween(dateIso) {
+  const date = dateIso ? new Date(dateIso) : null;
+  if (!date || Number.isNaN(date.getTime())) return Infinity;
+  const diffMs = Date.now() - date.getTime();
+  return diffMs / (1000 * 60 * 60 * 24);
+}
+
+async function fetchCdiFromBrasilApi() {
+  const response = await fetch("https://brasilapi.com.br/api/taxas/v1");
+  if (!response.ok) throw new Error(`BrasilAPI response ${response.status}`);
+  const payload = await response.json();
+  const entry = Array.isArray(payload)
+    ? payload.find((item) => String(item.nome || item.name || "").toUpperCase() === "CDI")
+    : null;
+  const value = entry ? parseNumericValue(entry.valor ?? entry.valorTaxa ?? entry.valorDiario) : NaN;
+  if (Number.isNaN(value)) throw new Error("CDI nao encontrado na BrasilAPI");
+  return { value, source: "brasilapi" };
+}
+
+async function fetchCdiFromBcb() {
+  const response = await fetch("https://api.bcb.gov.br/dados/serie/bcdata.sgs.12/dados/ultimos/1?formato=json");
+  if (!response.ok) throw new Error(`BCB response ${response.status}`);
+  const payload = await response.json();
+  const value = parseNumericValue(payload?.[0]?.valor);
+  if (Number.isNaN(value)) throw new Error("CDI nao encontrado no BCB");
+  return { value, source: "bcb" };
+}
+
+async function fetchCdiFromOpenAI(previousRate) {
+  if (!openai) return null;
+  const completion = await openai.chat.completions.create({
+    model: OPENAI_MODEL,
+    messages: [
+      { role: "system", content: "Responda somente com o valor numerico do CDI anual brasileiro em percentual (ex: 10.65)." },
+      {
+        role: "user",
+        content: `Qual o CDI anual mais recente divulgado pelo mercado brasileiro? Retorne apenas o numero decimal. Taxa anterior conhecida: ${previousRate ?? "desconhecida"}.`,
+      },
+    ],
+    temperature: 0,
+  });
+
+  const text = completion.choices?.[0]?.message?.content || "";
+  const match = text.match(/([0-9]+(?:[.,][0-9]+)?)/);
+  const value = match ? parseNumericValue(match[1]) : NaN;
+  if (Number.isNaN(value)) throw new Error("Nao foi possivel extrair o CDI retornado pelo modelo");
+  return { value, source: "openai" };
+}
+
+async function refreshCdiRate(db, { force = false } = {}) {
+  const meta = db.meta || createDefaultMeta();
+  db.meta = meta;
+
+  const current = meta.cdiRate || createDefaultMeta().cdiRate;
+  const ageDays = getDaysBetween(current.updatedAt);
+
+  if (!force && ageDays < CDI_MAX_AGE_DAYS) {
+    return current;
+  }
+
+  const sources = [fetchCdiFromBrasilApi, fetchCdiFromBcb];
+  for (const getter of sources) {
+    try {
+      const latest = await getter();
+      if (latest?.value) {
+        const saved = { value: Number(latest.value), source: latest.source, updatedAt: new Date().toISOString() };
+        meta.cdiRate = saved;
+        await saveDB(db);
+        return saved;
+      }
+    } catch (error) {
+      console.error("Falha ao buscar CDI:", error.message || error);
+    }
+  }
+
+  if (openai) {
+    try {
+      const latest = await fetchCdiFromOpenAI(current.value);
+      if (latest?.value) {
+        const saved = { value: Number(latest.value), source: latest.source, updatedAt: new Date().toISOString() };
+        meta.cdiRate = saved;
+        await saveDB(db);
+        return saved;
+      }
+    } catch (error) {
+      console.error("Falha ao pedir CDI para OpenAI:", error.message || error);
+    }
+  }
+
+  if (!meta.cdiRate) {
+    meta.cdiRate = createDefaultMeta().cdiRate;
+    await saveDB(db);
+  }
+
+  return meta.cdiRate;
 }
 
 async function authMiddleware(req, res, next) {
@@ -110,11 +238,22 @@ async function authMiddleware(req, res, next) {
 
 app.get("/api/health", (_, res) => res.json({ ok: true }));
 
+app.get("/api/market/cdi", authMiddleware, async (_req, res) => {
+  try {
+    const db = await loadDB();
+    const rate = await refreshCdiRate(db);
+    return res.json({ rate: Number(rate.value), updatedAt: rate.updatedAt, source: rate.source });
+  } catch (error) {
+    console.error("Erro ao consultar CDI:", error);
+    return res.status(500).json({ message: "Nao foi possivel obter o CDI atual" });
+  }
+});
+
 app.post("/api/ai/insight", authMiddleware, async (req, res) => {
-  if (!gemini) {
+  if (!openai) {
     return res.json({
       title: "IA desativada",
-      message: "Configure GEMINI_API_KEY (ou GOOGLE_API_KEY) no servidor para receber insights.",
+      message: "Configure OPENAI_API_KEY no servidor para receber insights.",
       type: "warning",
     });
   }
@@ -125,29 +264,23 @@ app.post("/api/ai/insight", authMiddleware, async (req, res) => {
   }
 
   try {
-    const response = await gemini.models.generateContent({
-      model: "gemini-2.5-flash",
-      contents: `Analise estes dados financeiros e forneca um insight curto e acionavel em JSON.
-
-${context}
-
-Responda APENAS com o JSON.`,
-      config: {
-        responseMimeType: "application/json",
-        responseSchema: {
-          type: Type.OBJECT,
-          properties: {
-            title: { type: Type.STRING },
-            message: { type: Type.STRING },
-            type: { type: Type.STRING, enum: ["success", "warning", "info"] },
-          },
+    const completion = await openai.chat.completions.create({
+      model: OPENAI_MODEL,
+      messages: [
+        { role: "system", content: "Voce e um analista financeiro direto e conciso. Gere um insight curto em portugues do Brasil." },
+        {
+          role: "user",
+          content: `Analise estes dados financeiros e devolva um JSON com {title, message, type (success|warning|info)}.\n\n${context}\n\nResponda apenas com JSON.`,
         },
-      },
+      ],
+      temperature: 0.3,
+      response_format: { type: "json_object" },
     });
-
-    return res.json(JSON.parse(readText(response)));
+    const content = completion.choices?.[0]?.message?.content || "{}";
+    const parsed = JSON.parse(content);
+    return res.json(parsed);
   } catch (error) {
-    console.error("Erro ao gerar insight (Gemini):", error);
+    console.error("Erro ao gerar insight (OpenAI):", error);
     return res.json({
       title: "Erro na Analise",
       message: "Nao foi possivel conectar ao assistente financeiro no momento.",
@@ -157,8 +290,8 @@ Responda APENAS com o JSON.`,
 });
 
 app.post("/api/ai/advisor", authMiddleware, async (req, res) => {
-  if (!gemini) {
-    return res.status(503).json({ message: "GEMINI_API_KEY nao configurado no servidor" });
+  if (!openai) {
+    return res.status(503).json({ message: "OPENAI_API_KEY nao configurado no servidor" });
   }
 
   const { question, dataContext } = req.body || {};
@@ -169,22 +302,24 @@ app.post("/api/ai/advisor", authMiddleware, async (req, res) => {
   const safeDataContext = typeof dataContext === "string" ? dataContext : "";
 
   try {
-    const response = await gemini.models.generateContent({
-      model: "gemini-2.5-flash",
-      contents: `Voce e um consultor financeiro. Use APENAS os dados abaixo que o usuario permitiu compartilhar:
-
-${safeDataContext}
-
-Se os dados para responder a pergunta nao estiverem disponiveis (ex: usuario perguntou de investimentos mas nao compartilhou), avise educadamente.
-
-Pergunta do usuario: "${question}"
-
-Responda em Markdown.`,
+    const completion = await openai.chat.completions.create({
+      model: OPENAI_MODEL,
+      messages: [
+        {
+          role: "system",
+          content: "Voce e um consultor financeiro brasileiro. Responda em Markdown usando apenas os dados fornecidos pelo usuario. Seja preciso e cite lacunas quando faltarem dados.",
+        },
+        {
+          role: "user",
+          content: `Dados autorizados:\n${safeDataContext}\n\nPergunta do usuario: "${question}"`,
+        },
+      ],
+      temperature: 0.35,
     });
 
-    return res.json({ answer: readText(response) || "" });
+    return res.json({ answer: completion.choices?.[0]?.message?.content || "" });
   } catch (error) {
-    console.error("Erro ao responder (Gemini):", error);
+    console.error("Erro ao responder (OpenAI):", error);
     return res.status(500).json({ message: "Nao foi possivel conectar ao assistente financeiro no momento." });
   }
 });
@@ -307,6 +442,22 @@ app.post("/api/investments", authMiddleware, async (req, res) => {
   return res.status(201).json({ investment });
 });
 
+app.put("/api/investments/:id", authMiddleware, async (req, res) => {
+  const { id } = req.params;
+  const db = await loadDB();
+  const finances = ensureFinances(db, req.userId);
+  const existingIndex = finances.investments.findIndex((i) => i.id === id);
+  if (existingIndex === -1) {
+    return res.status(404).json({ message: "Investimento nao encontrado" });
+  }
+
+  const investment = normalizeInvestment({ ...finances.investments[existingIndex], ...req.body, id });
+  finances.investments[existingIndex] = investment;
+  db.finances[req.userId] = finances;
+  await saveDB(db);
+  return res.json({ investment });
+});
+
 app.delete("/api/investments/:id", authMiddleware, async (req, res) => {
   const { id } = req.params;
   const db = await loadDB();
@@ -394,6 +545,24 @@ app.use((err, _req, res, _next) => {
   console.error("Server error", err);
   return res.status(500).json({ message: "Erro interno" });
 });
+
+(async () => {
+  try {
+    const db = await loadDB();
+    await refreshCdiRate(db);
+  } catch (error) {
+    console.error("Falha inicial ao atualizar CDI:", error);
+  }
+})();
+
+setInterval(async () => {
+  try {
+    const db = await loadDB();
+    await refreshCdiRate(db);
+  } catch (error) {
+    console.error("Falha ao atualizar CDI agendado:", error);
+  }
+}, 1000 * 60 * 60 * 24);
 
 app.listen(PORT, () => {
   console.log(`API rodando em http://localhost:${PORT}`);

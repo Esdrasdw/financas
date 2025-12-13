@@ -24,7 +24,7 @@ import { Budgets } from "./components/Budgets";
 import { FinancialTools } from "./components/FinancialTools";
 import { Reports } from "./components/Reports";
 import { Login } from "./components/Login";
-import { analyzeFinances } from "./services/geminiService";
+import { analyzeFinances } from "./services/openaiService";
 import { api } from "./services/api";
 import { Menu, Lightbulb, X, Bell, LogOut } from "lucide-react";
 
@@ -194,6 +194,16 @@ const App: React.FC = () => {
     }
   };
 
+  const updateInvestment = async (inv: Investment) => {
+    setInvestments((prev) => prev.map((i) => (i.id === inv.id ? inv : i)));
+    try {
+      const { investment } = await api.updateInvestment(inv);
+      setInvestments((prev) => prev.map((i) => (i.id === inv.id ? investment : i)));
+    } catch (error: any) {
+      setGlobalError(error?.message || "Investimento atualizado apenas localmente.");
+    }
+  };
+
   const deleteInvestment = async (id: string) => {
     setInvestments((prev) => prev.filter((i) => i.id !== id));
     try {
@@ -235,7 +245,7 @@ const App: React.FC = () => {
       case "cards":
         return <CreditCards cards={cards} transactions={transactions} onAddCard={addCard} onDeleteCard={deleteCard} />;
       case "investments":
-        return <Investments investments={investments} onAdd={addInvestment} onDelete={deleteInvestment} />;
+        return <Investments investments={investments} onAdd={addInvestment} onUpdate={updateInvestment} onDelete={deleteInvestment} />;
       case "ai-advisor":
         return <SmartAdvisor transactions={transactions} investments={investments} />;
       case "goals":
@@ -409,7 +419,7 @@ const App: React.FC = () => {
               <Lightbulb size={20} />
             </div>
             <div>
-              <h4 className="font-bold text-sm mb-1">Dica do Gemini: {dailyInsight.title}</h4>
+              <h4 className="font-bold text-sm mb-1">Dica do GPT: {dailyInsight.title}</h4>
               <p className="text-sm opacity-90">{dailyInsight.message}</p>
             </div>
           </div>

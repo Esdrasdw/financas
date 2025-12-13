@@ -94,6 +94,13 @@ export const api = {
     });
   },
 
+  async updateInvestment(investment: Investment) {
+    return apiRequest<{ investment: Investment }>(`/investments/${investment.id}`, {
+      method: "PUT",
+      body: JSON.stringify(investment),
+    });
+  },
+
   async deleteInvestment(id: string) {
     await apiRequest<void>(`/investments/${id}`, { method: "DELETE" });
   },
@@ -107,5 +114,9 @@ export const api = {
 
   async deleteBudget(id: string) {
     await apiRequest<void>(`/budgets/${id}`, { method: "DELETE" });
+  },
+
+  async getCdiRate() {
+    return apiRequest<{ rate: number; updatedAt: string; source: string }>("/market/cdi");
   },
 };

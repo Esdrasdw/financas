@@ -43,7 +43,7 @@ export const analyzeFinances = async (
     console.error("Erro ao analisar financas:", error);
     return {
       title: "Erro na Analise",
-      message: "Nao foi possivel conectar ao assistente financeiro no momento.",
+      message: "Nao foi possivel conectar ao assistente GPT-5 Nano no momento.",
       type: "info",
     };
   }
