@@ -19,6 +19,7 @@ export interface Transaction {
   installmentTotal?: number;
   cardId?: string;
   paymentMethod: PaymentMethod;
+  installmentsPaid?: number;
 }
 
 export interface CreditCard {

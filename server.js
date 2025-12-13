@@ -68,13 +68,15 @@ const AI_IMPORT_SYSTEM_PROMPT =
   [
     "Voce ajuda a transformar extratos, faturas, holerites, planilhas ou descricoes livres em lancamentos financeiros.",
     "Leia o texto enviado e responda apenas com JSON no formato {\"transactions\": Array<Transacao>}",
-    "Transacao: {description: string, amount: number, type: \"INCOME\"|\"EXPENSE\", category?: string, date?: string, paymentMethod?: \"PIX\"|\"CASH\"|\"CARD\"}",
+    "Transacao: {description: string, amount: number, type: \"INCOME\"|\"EXPENSE\", category?: string, date?: string, paymentMethod?: \"PIX\"|\"CASH\"|\"CARD\", isInstallment?: boolean, installmentTotal?: number, installmentsPaid?: number}",
     "Regras:",
     "- Nao responda com nada alem do JSON; nao inclua markdown.",
     "- Se nao houver data, use a data de referencia fornecida pelo sistema.",
     "- Use INCOME para salarios, recebimentos, reembolsos ou entradas; EXPENSE para faturas, boletos, impostos ou compras.",
     "- Categorize de forma simples: Salario, Moradia, Alimentacao, Transporte, Lazer, Investimentos, Impostos, Taxas, Compras, Outros.",
     "- Se souber o meio de pagamento, preencha paymentMethod com PIX (transferencia/PIX), CASH (dinheiro) ou CARD (cartao).",
+    "- Compras parceladas: marque isInstallment=true, informe installmentTotal com o total de parcelas e installmentsPaid se algumas ja foram pagas.",
+    "- Pode retornar varias transacoes (varios produtos) no mesmo JSON; cada item deve representar um lancamento ou uma compra/parcelamento.",
     "- Se o arquivo for um resumo geral (ex: limite do cartao), ignore e retorne lista vazia.",
   ].join("\n");
 
@@ -542,7 +544,7 @@ app.post("/api/ai/import-transactions", authMiddleware, async (req, res) => {
     }
 
     const rawTransactions = Array.isArray(parsed.transactions) ? parsed.transactions : [];
-    const normalized = rawTransactions.map((tx) => normalizeTransaction({ ...tx, date: tx.date || referenceDate }));
+    const normalized = rawTransactions.flatMap((tx) => expandInstallmentsFromAi({ ...tx, date: tx.date || referenceDate }, referenceDate));
 
     const db = await loadDB();
     const finances = ensureFinances(db, req.userId);
@@ -788,6 +790,41 @@ function normalizeTransaction(input) {
     cardId: input.cardId,
     paymentMethod: normalizePaymentMethod(input.paymentMethod, input.cardId),
   };
+}
+
+function expandInstallmentsFromAi(tx, referenceDate) {
+  const total = Number(tx.installmentTotal || tx.installmentsTotal || tx.installmentCurrent || 0);
+  const installmentsPaid = Math.max(0, Number(tx.installmentsPaid || tx.paidInstallments || 0) || 0);
+  const isInstallment = tx.isInstallment || total > 1;
+
+  if (!isInstallment || total <= 1) {
+    return [normalizeTransaction({ ...tx, date: tx.date || referenceDate })];
+  }
+
+  const perInstallmentAmount = Number(tx.amount || 0) / total;
+  const baseDateIso = tx.date || referenceDate;
+
+  const items = [];
+  for (let i = installmentsPaid; i < total; i += 1) {
+    const installmentNumber = i + 1;
+    const dueDate = new Date(baseDateIso);
+    if (!Number.isNaN(dueDate.getTime())) {
+      dueDate.setMonth(dueDate.getMonth() + (installmentNumber - 1));
+    }
+    items.push(
+      normalizeTransaction({
+        ...tx,
+        amount: perInstallmentAmount,
+        date: !Number.isNaN(new Date(baseDateIso).getTime()) ? dueDate.toISOString().split("T")[0] : referenceDate,
+        description: `${tx.description || "Parcelado"} (${installmentNumber}/${total})`,
+        isInstallment: true,
+        installmentCurrent: installmentNumber,
+        installmentTotal: total,
+      })
+    );
+  }
+
+  return items;
 }
 
 function normalizePaymentMethod(value, cardId) {

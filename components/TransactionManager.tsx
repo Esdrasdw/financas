@@ -47,8 +47,10 @@ export const TransactionManager: React.FC<TransactionManagerProps> = ({ transact
         setDate(getNextCardDueDate(card.closingDay, card.dueDay));
       }
       setPaymentMethod('CARD');
+    } else if (paymentMethod === 'CARD') {
+      setPaymentMethod('PIX');
     }
-  }, [selectedCardId, cards]);
+  }, [selectedCardId, cards, paymentMethod]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -252,41 +254,56 @@ export const TransactionManager: React.FC<TransactionManagerProps> = ({ transact
       </div>
 
       {/* Filters */}
-      <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-100">
-        <div className="flex flex-col md:flex-row gap-3">
-          <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 w-5 h-5" />
-            <input 
-              type="text" 
-              placeholder="Buscar transações..." 
-              className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-            />
+      <div className="bg-gradient-to-r from-indigo-50 via-white to-emerald-50 p-4 rounded-2xl border border-slate-100 shadow-sm">
+        <div className="flex flex-col gap-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2 text-slate-700 font-semibold text-sm">
+              <Search size={16} className="text-indigo-500" />
+              Filtros rápidos
+            </div>
+            <button
+              onClick={() => { setSelectedMonth('all'); setSelectedYear('all'); setSearchTerm(''); }}
+              className="text-xs font-semibold text-indigo-700 hover:underline"
+            >
+              Limpar filtros
+            </button>
           </div>
-          <div className="flex gap-2">
-            <select
-              className="px-3 py-2 border border-slate-200 rounded-lg bg-slate-50 text-sm focus:ring-2 focus:ring-indigo-500"
-              value={selectedYear}
-              onChange={(e) => setSelectedYear(e.target.value)}
-            >
-              <option value="all">Todos os anos</option>
-              {availableYears.map((year) => (
-                <option key={year} value={year}>{year}</option>
-              ))}
-            </select>
-            <select
-              className="px-3 py-2 border border-slate-200 rounded-lg bg-slate-50 text-sm focus:ring-2 focus:ring-indigo-500"
-              value={selectedMonth}
-              onChange={(e) => setSelectedMonth(e.target.value)}
-            >
-              <option value="all">Todos os meses</option>
-              {availableMonths.map((month) => (
-                <option key={month} value={month.toString()}>
-                  {new Date(2024, month - 1, 1).toLocaleDateString('pt-BR', { month: 'short' })}
-                </option>
-              ))}
-            </select>
+
+          <div className="flex flex-col md:flex-row gap-3">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 w-5 h-5" />
+              <input 
+                type="text" 
+                placeholder="Buscar transações..." 
+                className="w-full pl-10 pr-4 py-2 bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-sm"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+              />
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <select
+                className="px-3 py-2 border border-slate-200 rounded-xl bg-white text-sm focus:ring-2 focus:ring-indigo-500 shadow-sm min-w-[140px]"
+                value={selectedYear}
+                onChange={(e) => setSelectedYear(e.target.value)}
+              >
+                <option value="all">Todos os anos</option>
+                {availableYears.map((year) => (
+                  <option key={year} value={year}>{year}</option>
+                ))}
+              </select>
+              <select
+                className="px-3 py-2 border border-slate-200 rounded-xl bg-white text-sm focus:ring-2 focus:ring-indigo-500 shadow-sm min-w-[150px]"
+                value={selectedMonth}
+                onChange={(e) => setSelectedMonth(e.target.value)}
+              >
+                <option value="all">Todos os meses</option>
+                {availableMonths.map((month) => (
+                  <option key={month} value={month.toString()}>
+                    {new Date(2024, month - 1, 1).toLocaleDateString('pt-BR', { month: 'short' })}
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
         </div>
       </div>
