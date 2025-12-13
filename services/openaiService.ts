@@ -80,7 +80,8 @@ export const askFinancialAdvisor = async (
   question: string,
   transactions: Transaction[],
   investments: Investment[],
-  preferences: AIPreferences
+  preferences: AIPreferences,
+  history: { role: "user" | "ai"; content: string }[]
 ) => {
   let dataContext = "";
 
@@ -100,11 +101,21 @@ export const askFinancialAdvisor = async (
   dataContext +=
     "Observacoes: Valores em BRL (R$). TRANSACOES seguem {date, description, amount, type, category, recurrence, cardId?}. INVESTIMENTOS seguem {name, amount, type, percentageOfCDI, startDate}.\n";
 
+  const normalizedHistory = Array.isArray(history)
+    ? history
+        .map((msg) => ({
+          role: msg.role === "ai" ? "assistant" : "user",
+          content: msg.content || "",
+        }))
+        .filter((msg) => msg.content.trim().length > 0)
+    : [];
+
   const response = await apiRequest<AdvisorResponse>("/ai/advisor", {
     method: "POST",
     body: JSON.stringify({
       question,
       dataContext,
+      history: normalizedHistory,
     }),
   });
 

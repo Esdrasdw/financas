@@ -356,36 +356,52 @@ app.post("/api/ai/advisor", authMiddleware, async (req, res) => {
     return res.status(503).json({ message: "OPENAI_API_KEY nao configurado no servidor" });
   }
 
-  const { question, dataContext } = req.body || {};
-  if (!question || typeof question !== "string") {
-    return res.status(400).json({ message: "question deve ser uma string" });
+  const { question, dataContext, history } = req.body || {};
+  if (!question && (!history || !Array.isArray(history) || history.length === 0)) {
+    return res.status(400).json({ message: "Envie question ou history para gerar uma resposta" });
   }
 
   const safeDataContext = typeof dataContext === "string" ? dataContext : "";
+  const normalizedHistory = Array.isArray(history)
+    ? history
+        .map((item) => {
+          const content = typeof item.content === "string" ? item.content.trim() : "";
+          if (!content) return null;
+          const role = item.role === "assistant" || item.role === "ai" ? "assistant" : "user";
+          return { role, content };
+        })
+        .filter(Boolean)
+    : [];
 
   try {
+    const messages = [
+      {
+        role: "system",
+        content: AI_ADVISOR_SYSTEM_PROMPT,
+      },
+      {
+        role: "system",
+        content:
+          "Se a pergunta nao pedir dado, analise ou acao financeira, responda apenas com 1-2 frases simples, sem markdown e sem secoes. So use secoes (Resumo/Analise/Proximos passos/Perguntas) se houver pedido explicito de dado/analise/acao financeira.",
+      },
+      {
+        role: "system",
+        content: [
+          "Contexto de dados autorizado (use somente se a pergunta pedir analise/calculo ou acao financeira; ignore em saudacoes ou conversas genericas):",
+          safeDataContext || "(sem dados adicionais)",
+        ].join("\n"),
+      },
+    ];
+
+    if (normalizedHistory.length) {
+      messages.push(...normalizedHistory);
+    } else if (question && typeof question === "string") {
+      messages.push({ role: "user", content: question });
+    }
+
     const completion = await openai.chat.completions.create({
       model: OPENAI_MODEL,
-      messages: [
-        {
-          role: "system",
-          content: AI_ADVISOR_SYSTEM_PROMPT,
-        },
-        {
-          role: "system",
-          content:
-            "Se a pergunta nao pedir dado, analise ou acao financeira, responda apenas com 1-2 frases simples, sem markdown e sem secoes. So use secoes (Resumo/Analise/Proximos passos/Perguntas) se houver pedido explicito de dado/analise/acao financeira.",
-        },
-        {
-          role: "user",
-          content: [
-            `Pergunta do usuario: "${question}"`,
-            "",
-            "Contexto de dados (use somente se a pergunta pedir analise/calculo ou acao financeira; ignore em saudacoes ou conversas genericas):",
-            safeDataContext || "(sem dados adicionais)",
-          ].join("\n"),
-        },
-      ],
+      messages,
     });
 
     return res.json({ answer: completion.choices?.[0]?.message?.content || "" });

@@ -41,12 +41,13 @@ export const SmartAdvisor: React.FC<SmartAdvisorProps> = ({ transactions, invest
     if (!input.trim()) return;
 
     const userMessage = input;
-    setMessages(prev => [...prev, { role: 'user', content: userMessage }]);
+    const historyToSend = [...messages, { role: 'user', content: userMessage }];
+    setMessages(historyToSend);
     setInput('');
     setIsLoading(true);
 
     try {
-      const response = await askFinancialAdvisor(userMessage, transactions, investments, preferences);
+      const response = await askFinancialAdvisor(userMessage, transactions, investments, preferences, historyToSend);
       setMessages(prev => [...prev, { role: 'ai', content: response }]);
     } catch (error) {
       setMessages(prev => [...prev, { role: 'ai', content: 'Erro ao conectar. Verifique sua chave API.' }]);
