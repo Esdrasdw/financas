@@ -23,6 +23,7 @@ const JWT_SECRET = process.env.JWT_SECRET || (IS_PRODUCTION ? "" : "change-me-no
 const TOKEN_EXPIRES_IN = process.env.JWT_EXPIRES_IN || "7d";
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY || "";
 const OPENAI_MODEL = process.env.OPENAI_MODEL || "gpt-5-nano";
+const OPENAI_REASONING_EFFORT = process.env.OPENAI_REASONING_EFFORT || "low";
 const openai = OPENAI_API_KEY ? new OpenAI({ apiKey: OPENAI_API_KEY }) : null;
 const DEFAULT_CDI_RATE = 11.25;
 const CDI_MAX_AGE_DAYS = 15;
@@ -189,6 +190,7 @@ async function fetchCdiFromOpenAI(previousRate) {
   if (!openai) return null;
   const completion = await openai.chat.completions.create({
     model: OPENAI_MODEL,
+    reasoning: OPENAI_REASONING_EFFORT,
     messages: [
       { role: "system", content: "Responda somente com o valor numerico do CDI anual brasileiro em percentual (ex: 10.65)." },
       {
@@ -298,6 +300,7 @@ app.post("/api/ai/insight", authMiddleware, async (req, res) => {
   try {
     const completion = await openai.chat.completions.create({
       model: OPENAI_MODEL,
+      reasoning: OPENAI_REASONING_EFFORT,
       messages: [
         { role: "system", content: AI_INSIGHT_SYSTEM_PROMPT },
         {
@@ -335,6 +338,7 @@ app.post("/api/ai/advisor", authMiddleware, async (req, res) => {
   try {
     const completion = await openai.chat.completions.create({
       model: OPENAI_MODEL,
+      reasoning: OPENAI_REASONING_EFFORT,
       messages: [
         {
           role: "system",
