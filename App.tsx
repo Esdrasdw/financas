@@ -38,7 +38,7 @@ const App: React.FC = () => {
   const [budgets, setBudgets] = useState<Budget[]>([]);
   const [goals, setGoals] = useState<Goal[]>([]);
 
-  const [currentView, setCurrentView] = useState<ViewState>("transactions");
+  const [currentView, setCurrentView] = useState<ViewState>("dashboard");
   const [summary, setSummary] = useState<FinancialSummary>({
     totalBalance: 0,
     totalIncome: 0,

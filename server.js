@@ -930,6 +930,7 @@ function normalizeTransaction(input) {
     type: input.type === "INCOME" ? "INCOME" : "EXPENSE",
     category: input.category || "Geral",
     recurrence: input.recurrence || "NONE",
+    recurrenceId: input.recurrenceId,
     isInstallment: Boolean(input.isInstallment),
     installmentCurrent: input.installmentCurrent,
     installmentTotal: input.installmentTotal,

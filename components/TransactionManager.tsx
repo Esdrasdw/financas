@@ -52,6 +52,8 @@ const addMonths = (date: Date, months: number) => {
   return normalized;
 };
 
+const buildLocalId = () => Math.random().toString(36).slice(2, 11);
+
 const calculateCardDueDate = (purchaseDate: Date, card: CreditCard) => {
   let closingYear = purchaseDate.getFullYear();
   let closingMonth = purchaseDate.getMonth();
@@ -186,8 +188,24 @@ export const TransactionManager: React.FC<TransactionManagerProps> = ({
     };
 
     const newTransactions: Omit<Transaction, 'id'>[] = [];
+    const isRecurringExpense = recurrence === 'MONTHLY' && type === TransactionType.EXPENSE;
 
-    if (isInstallment && type === TransactionType.EXPENSE) {
+    if (isRecurringExpense) {
+      const baseDate = card ? dueDate : purchaseDate;
+      const recurringStatus = card ? 'PENDING' : 'PAID';
+      const recurrenceId = buildLocalId();
+      const monthsToGenerate = 12;
+
+      for (let i = 0; i < monthsToGenerate; i += 1) {
+        const currentDate = addMonths(baseDate, i);
+        newTransactions.push({
+          ...baseTransaction,
+          status: recurringStatus,
+          recurrenceId,
+          date: currentDate.toISOString().split('T')[0],
+        });
+      }
+    } else if (isInstallment && type === TransactionType.EXPENSE) {
       const installmentAmount = baseTransaction.amount / totalInstallments;
       const remainingInstallments = totalInstallments - paidInstallments;
       const startingDate = card ? dueDate : purchaseDate;
@@ -397,6 +415,14 @@ export const TransactionManager: React.FC<TransactionManagerProps> = ({
     }
     const ids = transactions.filter((item) => getInstallmentGroupKey(item) === key).map((item) => item.id);
     const uniqueIds = Array.from(new Set(ids.length ? ids : [tx.id]));
+    onDeleteMany(uniqueIds);
+  };
+
+  const handleCancelRecurrence = (tx: Transaction) => {
+    if (!tx.recurrenceId) return;
+    const ids = transactions.filter((item) => item.recurrenceId === tx.recurrenceId).map((item) => item.id);
+    if (!ids.length) return;
+    const uniqueIds = Array.from(new Set(ids));
     onDeleteMany(uniqueIds);
   };
 
@@ -939,6 +965,14 @@ export const TransactionManager: React.FC<TransactionManagerProps> = ({
                         className="text-[11px] text-amber-700 hover:underline w-fit"
                       >
                         Marcar como nao pago
+                      </button>
+                    )}
+                    {t.recurrence === 'MONTHLY' && t.recurrenceId && (
+                      <button
+                        onClick={() => handleCancelRecurrence(t)}
+                        className="text-[11px] text-rose-700 hover:underline w-fit"
+                      >
+                        Cancelar recorrencia
                       </button>
                     )}
                   </div>

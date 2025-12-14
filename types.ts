@@ -16,6 +16,7 @@ export interface Transaction {
   type: TransactionType;
   category: string;
   recurrence: RecurrenceType;
+  recurrenceId?: string;
   isInstallment?: boolean;
   installmentCurrent?: number;
   installmentTotal?: number;
