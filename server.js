@@ -149,8 +149,13 @@ async function loadDB() {
     const raw = await fs.readFile(DATA_FILE, "utf-8");
     db = JSON.parse(raw);
   } catch (error) {
-    if (error.code !== "ENOENT") throw error;
-    db = createSeed();
+    if (error.code === "ENOENT") {
+      db = createSeed();
+    } else {
+      console.error("DB corrompido, recriando seed:", error.message || error);
+      db = createSeed();
+      await saveDB(db);
+    }
   }
 
   const normalized = ensureDbShape(db);
@@ -518,7 +523,6 @@ app.post("/api/ai/import-transactions", authMiddleware, async (req, res) => {
   try {
     const completion = await openai.chat.completions.create({
       model: OPENAI_MODEL,
-      reasoning: { effort: "high" },
       messages: [
         { role: "system", content: AI_IMPORT_SYSTEM_PROMPT },
         {
