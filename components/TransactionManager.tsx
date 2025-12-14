@@ -141,7 +141,7 @@ export const TransactionManager: React.FC<TransactionManagerProps> = ({
   const [isImporting, setIsImporting] = useState(false);
   const [importFeedback, setImportFeedback] = useState<string | null>(null);
 
-  const paymentLabels: Record<PaymentMethod, string> = { PIX: 'PIX', CASH: 'Dinheiro', CARD: 'Cart?o' };
+  const paymentLabels: Record<PaymentMethod, string> = { PIX: 'PIX', CASH: 'Dinheiro', CARD: 'Cartao' };
   const statusLabels: Record<PaymentStatus, { label: string; color: string }> = {
     PENDING: { label: 'Pendente', color: 'bg-amber-100 text-amber-700 border border-amber-200' },
     PAID: { label: 'Pago', color: 'bg-emerald-100 text-emerald-700 border border-emerald-200' },
@@ -312,7 +312,7 @@ export const TransactionManager: React.FC<TransactionManagerProps> = ({
           map.set(key, {
             key,
             cardId: t.cardId!,
-            cardName: card?.name || 'Cart?o',
+            cardName: card?.name || 'Cartao',
             dueDate: due,
             monthKey: monthKey(due),
             total: 0,
@@ -467,7 +467,7 @@ export const TransactionManager: React.FC<TransactionManagerProps> = ({
       <div className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm flex flex-col gap-3">
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
           <div>
-            <p className="text-xs uppercase font-semibold text-slate-500">Vis?o mensal</p>
+            <p className="text-xs uppercase font-semibold text-slate-500">Visao mensal</p>
             <h3 className="text-xl font-bold text-slate-800">{referenceLabel}</h3>
             <p className="text-xs text-slate-500">Mostrando somente transacoes e faturas deste mes.</p>
           </div>
@@ -476,7 +476,7 @@ export const TransactionManager: React.FC<TransactionManagerProps> = ({
               onClick={() => shiftMonth(-1)}
               className="px-3 py-2 rounded-lg border border-slate-200 bg-slate-50 text-sm flex items-center gap-2 hover:border-indigo-200"
             >
-              <ChevronLeft size={16} /> M?s anterior
+              <ChevronLeft size={16} /> Mes anterior
             </button>
             <button
               onClick={() => shiftMonth(1)}
@@ -534,7 +534,7 @@ export const TransactionManager: React.FC<TransactionManagerProps> = ({
             <h4 className="text-2xl font-bold text-indigo-900">
               {realizedBalance.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
             </h4>
-            <p className="text-xs text-indigo-700/80 mt-1">Com pend?ncias: {projectedBalance.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</p>
+            <p className="text-xs text-indigo-700/80 mt-1">Com pendencias: {projectedBalance.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</p>
           </div>
           <div className="p-4 rounded-xl border border-slate-100 bg-amber-50">
             <p className="text-xs font-semibold text-amber-700 uppercase">Faturas do mes</p>
@@ -593,7 +593,7 @@ export const TransactionManager: React.FC<TransactionManagerProps> = ({
                     </button>
                   </div>
                 ))}
-                {pendingNonCard.length === 0 && <p className="text-xs text-slate-500 mt-2">Sem pend?ncias manuais.</p>}
+                {pendingNonCard.length === 0 && <p className="text-xs text-slate-500 mt-2">Sem pendencias manuais.</p>}
               </div>
             </div>
           </div>
@@ -601,7 +601,7 @@ export const TransactionManager: React.FC<TransactionManagerProps> = ({
             <div className="flex items-center justify-between mb-3">
               <div>
                 <p className="text-xs uppercase font-semibold text-slate-500">Faturas do mes</p>
-                <h4 className="text-sm font-bold text-slate-800">Cart?o, vencimento e status</h4>
+                <h4 className="text-sm font-bold text-slate-800">Cartao, vencimento e status</h4>
               </div>
               <span className="text-xs px-3 py-1 rounded-full bg-slate-100 text-slate-700 border border-slate-200">
                 {monthInvoices.length} faturas
@@ -691,7 +691,7 @@ export const TransactionManager: React.FC<TransactionManagerProps> = ({
                   size={12}
                   className={`${showFutureInvoices ? 'rotate-180' : ''} transition-transform`}
                 />
-                Mostrar pr?ximas faturas
+                Mostrar proximas faturas
               </button>
               {showFutureInvoices && (
                 <div className="mt-3 space-y-2">
@@ -727,7 +727,7 @@ export const TransactionManager: React.FC<TransactionManagerProps> = ({
                 <p className="text-sm font-semibold text-slate-800">Importar com IA (arquivo opcional)</p>
                 <p className="text-xs text-slate-500">Envie um arquivo ou apenas cole uma descricao/resumo que a IA cria as transacoes.</p>
               </div>
-              <span className="text-[11px] text-slate-500">Data padr?o: hoje</span>
+              <span className="text-[11px] text-slate-500">Data padrao: hoje</span>
             </div>
 
             <div className="flex flex-col md:flex-row gap-2">
@@ -770,7 +770,7 @@ export const TransactionManager: React.FC<TransactionManagerProps> = ({
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2 text-slate-700 font-semibold text-sm">
               <Search size={16} className="text-indigo-500" />
-              Filtros r?pidos
+              Filtros rapidos
             </div>
             <button
               onClick={() => {
@@ -831,7 +831,7 @@ export const TransactionManager: React.FC<TransactionManagerProps> = ({
         </div>
 
         {pendingTransactions.length === 0 ? (
-          <p className="text-sm text-slate-500">Nenhuma pend?ncia no momento.</p>
+          <p className="text-sm text-slate-500">Nenhuma pendencia no momento.</p>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             {pendingTransactions.slice(0, 6).map((t) => (
@@ -913,7 +913,7 @@ export const TransactionManager: React.FC<TransactionManagerProps> = ({
                     </span>
                     {t.cardId && (
                       <span className="flex items-center gap-1 text-xs text-indigo-600">
-                        <CardIcon size={10} /> Cart?o - vence {new Date(t.date).toLocaleDateString('pt-BR')}
+                        <CardIcon size={10} /> Cartao - vence {new Date(t.date).toLocaleDateString('pt-BR')}
                       </span>
                     )}
                     {(t.isInstallment || (t.installmentTotal || 0) > 1) && (
@@ -938,7 +938,7 @@ export const TransactionManager: React.FC<TransactionManagerProps> = ({
                         onClick={() => updateStatus([t.id], 'PENDING')}
                         className="text-[11px] text-amber-700 hover:underline w-fit"
                       >
-                        Marcar como n?o pago
+                        Marcar como nao pago
                       </button>
                     )}
                   </div>
@@ -1014,7 +1014,7 @@ export const TransactionManager: React.FC<TransactionManagerProps> = ({
                   className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
-                  placeholder="Ex: Compra Online, Sal?rio..."
+                  placeholder="Ex: Compra Online, Salario..."
                 />
               </div>
 
@@ -1063,8 +1063,8 @@ export const TransactionManager: React.FC<TransactionManagerProps> = ({
                     <option>Moradia</option>
                     <option>Transporte</option>
                     <option>Lazer</option>
-                    <option>Sa?de</option>
-                    <option>Sal?rio</option>
+                    <option>Saude</option>
+                    <option>Salario</option>
                     <option>Investimentos</option>
                     <option>Educacao</option>
                     <option>Compras</option>
@@ -1078,12 +1078,12 @@ export const TransactionManager: React.FC<TransactionManagerProps> = ({
                     onChange={(e) => setPaymentMethod(e.target.value as PaymentMethod)}
                     disabled={type === TransactionType.EXPENSE && Boolean(selectedCardId)}
                   >
-                    <option value="PIX">PIX / Transfer?ncia</option>
+                    <option value="PIX">PIX / Transferencia</option>
                     <option value="CASH">Dinheiro</option>
-                    <option value="CARD">Cart?o</option>
+                    <option value="CARD">Cartao</option>
                   </select>
                   {type === TransactionType.EXPENSE && selectedCardId && (
-                    <p className="text-[10px] text-slate-500 mt-1">Cart?o selecionado define o meio de pagamento.</p>
+                    <p className="text-[10px] text-slate-500 mt-1">Cartao selecionado define o meio de pagamento.</p>
                   )}
                 </div>
                 <div>
@@ -1100,13 +1100,13 @@ export const TransactionManager: React.FC<TransactionManagerProps> = ({
                 </div>
                 {type === TransactionType.EXPENSE && (
                   <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1">Cart?o de Cr?dito</label>
+                    <label className="block text-sm font-medium text-slate-700 mb-1">Cartao de Credito</label>
                     <select
                       className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
                       value={selectedCardId}
                       onChange={(e) => setSelectedCardId(e.target.value)}
                     >
-                      <option value="">Nenhum / D?bito</option>
+                      <option value="">Nenhum / Debito</option>
                       {cards.map((c) => (
                         <option key={c.id} value={c.id}>
                           {c.name}
@@ -1178,7 +1178,7 @@ export const TransactionManager: React.FC<TransactionManagerProps> = ({
                         />
                       </div>
                       <div>
-                        <label className="block text-xs font-bold text-slate-600 mb-1">J? pagas (colar)</label>
+                        <label className="block text-xs font-bold text-slate-600 mb-1">Ja pagas (colar)</label>
                         <input
                           type="number"
                           min="0"
