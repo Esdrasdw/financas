@@ -188,7 +188,24 @@ export const TransactionManager: React.FC<TransactionManagerProps> = ({
     };
 
     const newTransactions: Omit<Transaction, 'id'>[] = [];
-    if (isInstallment && type === TransactionType.EXPENSE) {
+    const isRecurringExpense = recurrence === 'MONTHLY' && type === TransactionType.EXPENSE && !isInstallment;
+
+    if (isRecurringExpense) {
+      const baseDate = card ? dueDate : purchaseDate;
+      const recurringStatus = card ? 'PENDING' : 'PAID';
+      const recurrenceId = buildLocalId();
+      const monthsToGenerate = 12;
+
+      for (let i = 0; i < monthsToGenerate; i += 1) {
+        const currentDate = addMonths(baseDate, i);
+        newTransactions.push({
+          ...baseTransaction,
+          status: recurringStatus,
+          recurrenceId,
+          date: currentDate.toISOString().split('T')[0],
+        });
+      }
+    } else if (isInstallment && type === TransactionType.EXPENSE) {
       const installmentAmount = baseTransaction.amount / totalInstallments;
       const remainingInstallments = totalInstallments - paidInstallments;
       const startingDate = card ? dueDate : purchaseDate;
