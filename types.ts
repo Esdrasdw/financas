@@ -12,6 +12,7 @@ export interface Transaction {
   description: string;
   amount: number;
   date: string;
+  purchaseDate?: string;
   type: TransactionType;
   category: string;
   recurrence: RecurrenceType;
@@ -22,6 +23,7 @@ export interface Transaction {
   paymentMethod: PaymentMethod;
   installmentsPaid?: number;
   status: PaymentStatus;
+  paidAt?: string;
 }
 
 export interface CreditCard {

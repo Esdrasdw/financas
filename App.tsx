@@ -10,6 +10,7 @@ import {
   User,
   FinanceDataset,
   Goal,
+  PaymentStatus,
 } from "./types";
 import { Sidebar } from "./components/Sidebar";
 import { Dashboard } from "./components/Dashboard";
@@ -37,7 +38,7 @@ const App: React.FC = () => {
   const [budgets, setBudgets] = useState<Budget[]>([]);
   const [goals, setGoals] = useState<Goal[]>([]);
 
-  const [currentView, setCurrentView] = useState<ViewState>("dashboard");
+  const [currentView, setCurrentView] = useState<ViewState>("transactions");
   const [summary, setSummary] = useState<FinancialSummary>({
     totalBalance: 0,
     totalIncome: 0,
@@ -156,6 +157,23 @@ const App: React.FC = () => {
     await deleteTransactions([id]);
   };
 
+  const updateTransactionStatus = (ids: string[], status: PaymentStatus, paidAt?: string) => {
+    if (!ids.length) return;
+    const timestamp = status === "PAID" ? paidAt || new Date().toISOString() : undefined;
+    const uniqueIds = Array.from(new Set(ids));
+    setTransactions((prev) =>
+      prev.map((t) =>
+        uniqueIds.includes(t.id)
+          ? {
+              ...t,
+              status,
+              paidAt: status === "PAID" ? timestamp : undefined,
+            }
+          : t
+      )
+    );
+  };
+
   const addCard = async (card: CreditCardType) => {
     try {
       const { card: saved } = await api.addCard(card);
@@ -270,6 +288,7 @@ const App: React.FC = () => {
             onAdd={addTransactions}
             onDelete={deleteTransaction}
             onDeleteMany={deleteTransactions}
+            onUpdateStatus={updateTransactionStatus}
             onImportFromFile={importTransactionsFromFile}
           />
         );

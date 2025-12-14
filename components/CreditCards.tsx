@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+﻿import React, { useMemo, useState } from 'react';
 import { CreditCard, Transaction, TransactionType } from '../types';
 import { CreditCard as CardIcon, Plus, Calendar, Trash2 } from 'lucide-react';
 
@@ -16,6 +16,8 @@ export const CreditCards: React.FC<CreditCardsProps> = ({ cards, transactions, o
   const [dueDay, setDueDay] = useState('10');
   const [closingDay, setClosingDay] = useState('3');
   const [color, setColor] = useState('bg-indigo-600');
+  const monthKey = (date: Date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+  const currentMonthKey = useMemo(() => monthKey(new Date()), []);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -32,17 +34,19 @@ export const CreditCards: React.FC<CreditCardsProps> = ({ cards, transactions, o
     setName(''); setLimit('');
   };
 
-  const getCardSpending = (cardId: string) => {
-    // Current month spending
-    const now = new Date();
-    return transactions
-      .filter(t => t.cardId === cardId && t.type === TransactionType.EXPENSE)
-      .filter(t => {
+  const getCardSpending = (cardId: string) =>
+    transactions
+      .filter((t) => t.cardId === cardId && t.type === TransactionType.EXPENSE)
+      .filter((t) => {
         const d = new Date(t.date);
-        return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
+        return !Number.isNaN(d.getTime()) && monthKey(d) === currentMonthKey;
       })
       .reduce((acc, t) => acc + t.amount, 0);
-  };
+
+  const getCardOpenBalance = (cardId: string) =>
+    transactions
+      .filter((t) => t.cardId === cardId && t.type === TransactionType.EXPENSE && t.status !== 'PAID')
+      .reduce((acc, t) => acc + t.amount, 0);
 
   const colors = [
     'bg-indigo-600', 'bg-purple-600', 'bg-rose-600', 'bg-emerald-600', 'bg-slate-800', 'bg-orange-500', 'bg-blue-600'
@@ -51,21 +55,22 @@ export const CreditCards: React.FC<CreditCardsProps> = ({ cards, transactions, o
   return (
     <div className="space-y-6">
        <div className="flex justify-between items-center">
-        <h2 className="text-2xl font-bold text-slate-800">Meus Cartões</h2>
+        <h2 className="text-2xl font-bold text-slate-800">Meus CartÃµes</h2>
         <button 
           onClick={() => setIsModalOpen(true)}
           className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-xl flex items-center gap-2 shadow-lg shadow-indigo-200"
         >
           <Plus size={20} />
-          Adicionar Cartão
+          Adicionar CartÃ£o
         </button>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {cards.map(card => {
           const spent = getCardSpending(card.id);
-          const available = card.limit - spent;
-          const progress = Math.min((spent / card.limit) * 100, 100);
+          const openBalance = getCardOpenBalance(card.id);
+          const available = Math.max(0, card.limit - openBalance);
+          const progress = Math.min((openBalance / card.limit) * 100, 100);
 
           return (
             <div key={card.id} className={`${card.color} rounded-2xl p-6 text-white relative overflow-hidden shadow-lg group`}>
@@ -79,13 +84,13 @@ export const CreditCards: React.FC<CreditCardsProps> = ({ cards, transactions, o
                </div>
 
                <div className="mb-6 relative z-10">
-                 <p className="text-xs opacity-70 mb-1">Limite Disponível</p>
+                 <p className="text-xs opacity-70 mb-1">Limite Disponivel</p>
                  <h3 className="text-2xl font-bold">{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(available)}</h3>
                </div>
 
                <div className="space-y-2 relative z-10">
                  <div className="flex justify-between text-xs opacity-90">
-                   <span>Fatura Atual: {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(spent)}</span>
+                   <span>Fatura do mes: {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(spent)}</span>
                    <span>Lim: {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(card.limit)}</span>
                  </div>
                  <div className="w-full bg-black/20 rounded-full h-1.5 overflow-hidden">
@@ -111,7 +116,7 @@ export const CreditCards: React.FC<CreditCardsProps> = ({ cards, transactions, o
         
         {cards.length === 0 && (
           <div className="col-span-full py-12 text-center text-slate-400 border-2 border-dashed border-slate-200 rounded-2xl">
-            Nenhum cartão cadastrado. Adicione um para gerenciar suas faturas.
+            Nenhum cartÃ£o cadastrado. Adicione um para gerenciar suas faturas.
           </div>
         )}
       </div>
@@ -121,12 +126,12 @@ export const CreditCards: React.FC<CreditCardsProps> = ({ cards, transactions, o
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden animate-fade-in-up">
             <div className="bg-indigo-600 px-6 py-4 flex justify-between items-center">
-              <h3 className="text-white font-bold text-lg">Novo Cartão</h3>
-              <button onClick={() => setIsModalOpen(false)} className="text-white/80 hover:text-white">✕</button>
+              <h3 className="text-white font-bold text-lg">Novo CartÃ£o</h3>
+              <button onClick={() => setIsModalOpen(false)} className="text-white/80 hover:text-white">âœ•</button>
             </div>
             <form onSubmit={handleSubmit} className="p-6 space-y-4">
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Nome do Cartão</label>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Nome do CartÃ£o</label>
                 <input required type="text" className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none" 
                   value={name} onChange={e => setName(e.target.value)} placeholder="Ex: Nubank, Visa Infinite" />
               </div>
@@ -148,7 +153,7 @@ export const CreditCards: React.FC<CreditCardsProps> = ({ cards, transactions, o
                 </div>
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-2">Cor do Cartão</label>
+                <label className="block text-sm font-medium text-slate-700 mb-2">Cor do CartÃ£o</label>
                 <div className="flex gap-2 flex-wrap">
                   {colors.map(c => (
                     <button 
@@ -160,7 +165,7 @@ export const CreditCards: React.FC<CreditCardsProps> = ({ cards, transactions, o
                   ))}
                 </div>
               </div>
-              <button type="submit" className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 rounded-lg mt-4">Salvar Cartão</button>
+              <button type="submit" className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 rounded-lg mt-4">Salvar CartÃ£o</button>
             </form>
           </div>
         </div>
@@ -168,3 +173,5 @@ export const CreditCards: React.FC<CreditCardsProps> = ({ cards, transactions, o
     </div>
   );
 };
+
+
