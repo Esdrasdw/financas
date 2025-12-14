@@ -532,121 +532,258 @@ export const TransactionManager: React.FC<TransactionManagerProps> = ({
 
   const selectedCard = selectedCardId ? cards.find((c) => c.id === selectedCardId) : null;
   const duePreview = selectedCard ? calculateCardDueDate(toDate(date) || new Date(), selectedCard).dueDate : null;
+  const formatCurrency = (value: number) => value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+  const percentage = (part: number, total: number) => {
+    if (total <= 0) return 0;
+    return Math.min(100, Math.round((part / total) * 100));
+  };
   return (
     <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-        <h2 className="text-2xl font-bold text-slate-800">Transacoes</h2>
-        <div className="flex gap-2 flex-wrap">
-          <button
-            onClick={exportCSV}
-            className="bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 px-4 py-2 rounded-xl flex items-center gap-2 transition-colors"
-            title="Exportar para Excel/CSV"
-          >
-            <Download size={20} />
-            <span className="hidden sm:inline">Exportar CSV</span>
-          </button>
-          <button
-            onClick={() => setIsModalOpen(true)}
-            className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-xl flex items-center gap-2 transition-colors shadow-lg shadow-indigo-200"
-          >
-            <Plus size={20} />
-            Nova Transacao
-          </button>
+      <div className="relative overflow-hidden rounded-3xl border border-indigo-900/30 bg-gradient-to-br from-slate-900 via-indigo-900 to-slate-800 text-white shadow-2xl">
+        <div className="absolute inset-0 opacity-60">
+          <div className="absolute -left-10 top-6 w-56 h-56 bg-emerald-500/25 blur-3xl rounded-full"></div>
+          <div className="absolute right-0 -bottom-16 w-72 h-72 bg-indigo-400/30 blur-3xl rounded-full"></div>
         </div>
-      </div>
+        <div className="relative p-6 md:p-8 space-y-6">
+          <div className="flex flex-col lg:flex-row justify-between gap-6">
+            <div className="space-y-3">
+              <p className="text-xs uppercase tracking-[0.2em] text-indigo-200">Aba de transacoes</p>
+              <h2 className="text-3xl md:text-4xl font-bold leading-tight">Radar de movimentacoes</h2>
+              <p className="text-sm md:text-base text-indigo-100 max-w-2xl">
+                Interface limpa e interativa para navegar, adicionar e revisar tudo o que entra e sai da sua conta.
+              </p>
+              <div className="flex flex-wrap gap-2">
+                <span className="px-3 py-1 rounded-full bg-white/10 border border-white/20 text-xs font-semibold">
+                  {referenceLabel}
+                </span>
+                <span className="px-3 py-1 rounded-full bg-white/10 border border-white/20 text-xs font-semibold">
+                  Saldo realizado {formatCurrency(realizedBalance)}
+                </span>
+                <span className="px-3 py-1 rounded-full bg-white/10 border border-white/20 text-xs font-semibold">
+                  Projecao {formatCurrency(projectedBalance)}
+                </span>
+              </div>
+            </div>
+            <div className="flex flex-col items-end gap-3 w-full lg:w-auto">
+              <div className="flex flex-wrap justify-end gap-2">
+                <button
+                  onClick={() => document.getElementById('import-ai')?.scrollIntoView({ behavior: 'smooth' })}
+                  className="px-4 py-2 rounded-xl border border-white/30 bg-white/10 text-sm font-semibold hover:bg-white/20 backdrop-blur-sm transition-colors"
+                >
+                  Importar com IA
+                </button>
+                <button
+                  onClick={exportCSV}
+                  className="px-4 py-2 rounded-xl border border-white/30 bg-white/10 text-sm font-semibold hover:bg-white/20 backdrop-blur-sm transition-colors flex items-center gap-2"
+                  title="Exportar para Excel/CSV"
+                >
+                  <Download size={18} /> Exportar CSV
+                </button>
+                <button
+                  onClick={() => setIsModalOpen(true)}
+                  className="px-4 py-2 rounded-xl bg-white text-slate-900 text-sm font-bold shadow-lg shadow-black/20 flex items-center gap-2 hover:-translate-y-[1px] transition-all"
+                >
+                  <Plus size={18} /> Nova transacao
+                </button>
+              </div>
+              <div className="flex flex-wrap justify-end gap-2">
+                <button
+                  onClick={() => shiftMonth(-1)}
+                  className="px-3 py-2 rounded-xl border border-white/25 bg-white/10 text-xs font-semibold flex items-center gap-2 hover:bg-white/20"
+                >
+                  <ChevronLeft size={14} /> Mes anterior
+                </button>
+                <div className="px-4 py-2 rounded-xl bg-white/10 border border-white/20 text-sm font-semibold flex items-center gap-2">
+                  <CalendarClock size={16} /> {referenceLabel}
+                </div>
+                <button
+                  onClick={() => shiftMonth(1)}
+                  className="px-3 py-2 rounded-xl border border-white/25 bg-white/10 text-xs font-semibold flex items-center gap-2 hover:bg-white/20"
+                >
+                  Proximo mes <ChevronRight size={14} />
+                </button>
+                <button
+                  onClick={() => setShowMonthSelector((v) => !v)}
+                  className="px-3 py-2 rounded-xl border border-white/25 bg-white/10 text-xs font-semibold flex items-center gap-2 hover:bg-white/20"
+                >
+                  <ChevronDown size={14} className={`${showMonthSelector ? 'rotate-180' : ''} transition-transform`} />
+                  Selecionar mes
+                </button>
+              </div>
+            </div>
+          </div>
 
-      <div className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm flex flex-col gap-3">
-        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
-          <div>
-            <p className="text-xs uppercase font-semibold text-slate-500">Visao mensal</p>
-            <h3 className="text-xl font-bold text-slate-800">{referenceLabel}</h3>
-            <p className="text-xs text-slate-500">
-              {referenceMonth === 'all' ? 'Resumo consolidado de todos os meses, sem repetir parcelas.' : 'Mostrando apenas transacoes e faturas deste mes.'}
-            </p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+            <div className="p-4 rounded-2xl bg-white/10 border border-white/20 backdrop-blur-sm">
+              <div className="flex items-center justify-between">
+                <p className="text-xs uppercase font-semibold text-indigo-100">Receitas</p>
+                <span className="text-[11px] text-indigo-100/80">{formatCurrency(monthIncomePending)} a receber</span>
+              </div>
+              <p className="text-2xl font-bold mt-1">{formatCurrency(monthIncomeReceived)}</p>
+              <div className="mt-3 h-2 bg-white/10 rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-emerald-300"
+                  style={{ width: `${percentage(monthIncomeReceived, monthIncomeReceived + monthIncomePending)}%` }}
+                ></div>
+              </div>
+            </div>
+            <div className="p-4 rounded-2xl bg-white/10 border border-white/20 backdrop-blur-sm">
+              <div className="flex items-center justify-between">
+                <p className="text-xs uppercase font-semibold text-indigo-100">Despesas</p>
+                <span className="text-[11px] text-indigo-100/80">{formatCurrency(monthExpensePending)} pendentes</span>
+              </div>
+              <p className="text-2xl font-bold mt-1">{formatCurrency(monthExpensePaid)}</p>
+              <div className="mt-3 h-2 bg-white/10 rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-rose-300"
+                  style={{ width: `${percentage(monthExpensePaid, monthExpensePaid + monthExpensePending)}%` }}
+                ></div>
+              </div>
+            </div>
+            <div className="p-4 rounded-2xl bg-white/10 border border-white/20 backdrop-blur-sm">
+              <div className="flex items-center justify-between">
+                <p className="text-xs uppercase font-semibold text-indigo-100">Faturas do mes</p>
+                <span className="text-[11px] text-indigo-100/80">{formatCurrency(openInvoiceValue)} em aberto</span>
+              </div>
+              <p className="text-2xl font-bold mt-1">
+                {formatCurrency(monthInvoices.reduce((sum, inv) => sum + inv.total, 0))}
+              </p>
+              <div className="mt-3 h-2 bg-white/10 rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-amber-300"
+                  style={{
+                    width: `${percentage(
+                      monthInvoices.reduce((sum, inv) => sum + (inv.status === 'PAID' ? inv.total : 0), 0),
+                      monthInvoices.reduce((sum, inv) => sum + inv.total, 0)
+                    )}%`,
+                  }}
+                ></div>
+              </div>
+            </div>
+            <div className="p-4 rounded-2xl bg-white/10 border border-white/20 backdrop-blur-sm">
+              <div className="flex items-center justify-between">
+                <p className="text-xs uppercase font-semibold text-indigo-100">Caixa projetado</p>
+                <span className="text-[11px] text-indigo-100/80">Real: {formatCurrency(realizedBalance)}</span>
+              </div>
+              <p className="text-2xl font-bold mt-1">{formatCurrency(projectedBalance)}</p>
+              <div className="mt-3 h-2 bg-white/10 rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-emerald-200"
+                  style={{
+                    width: `${percentage(realizedBalance, projectedBalance === 0 ? 1 : projectedBalance)}%`,
+                  }}
+                ></div>
+              </div>
+            </div>
           </div>
-          <div className="flex items-center gap-2 flex-wrap">
-            <button
-              onClick={() => shiftMonth(-1)}
-              className="px-3 py-2 rounded-lg border border-slate-200 bg-slate-50 text-sm flex items-center gap-2 hover:border-indigo-200"
-            >
-              <ChevronLeft size={16} /> Mes anterior
-            </button>
-            <button
-              onClick={() => shiftMonth(1)}
-              className="px-3 py-2 rounded-lg border border-slate-200 bg-slate-50 text-sm flex items-center gap-2 hover:border-indigo-200"
-            >
-              Proximo mes <ChevronRight size={16} />
-            </button>
-            <button
-              onClick={() => setShowMonthSelector((v) => !v)}
-              className="px-3 py-2 rounded-lg border border-indigo-200 bg-indigo-50 text-sm text-indigo-700 flex items-center gap-2"
-            >
-              <ChevronDown size={14} className={`${showMonthSelector ? 'rotate-180' : ''} transition-transform`} /> Ver outro mes
-            </button>
-          </div>
-        </div>
-        {showMonthSelector && (
-          <div className="flex flex-wrap gap-2">
-            <select
-              className="px-3 py-2 border border-slate-200 rounded-xl bg-white text-sm shadow-sm min-w-[180px]"
-              value={referenceMonth}
-              onChange={(e) => setReferenceMonth(e.target.value)}
-            >
-              {availableMonths.map((month) => {
-                if (month === 'all') {
+
+          {showMonthSelector && (
+            <div className="bg-white/10 border border-white/20 rounded-2xl p-3 flex flex-wrap gap-2 backdrop-blur-sm">
+              <select
+                className="px-3 py-2 border border-white/30 rounded-xl bg-white/20 text-sm shadow-sm min-w-[200px] text-white"
+                value={referenceMonth}
+                onChange={(e) => setReferenceMonth(e.target.value)}
+              >
+                {availableMonths.map((month) => {
+                  if (month === 'all') {
+                    return (
+                      <option key={month} value={month}>
+                        Todos os meses
+                      </option>
+                    );
+                  }
+                  const d = parseMonthKey(month);
                   return (
                     <option key={month} value={month}>
-                      Todos os meses
+                      {d.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })}
                     </option>
                   );
-                }
-                const d = parseMonthKey(month);
-                return (
-                  <option key={month} value={month}>
-                    {d.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })}
-                  </option>
-                );
-              })}
-            </select>
-          </div>
-        )}
+                })}
+              </select>
+              <p className="text-xs text-indigo-100">
+                {referenceMonth === 'all'
+                  ? 'Resumo consolidado de todos os meses, sem repetir parcelas.'
+                  : 'Mostrando apenas transacoes e faturas deste mes.'}
+              </p>
+            </div>
+          )}
+        </div>
       </div>
 
-      <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-100">
-        <h3 className="text-lg font-bold text-slate-800 mb-4">Resumo do mes</h3>
+      <div className="bg-white/90 backdrop-blur-sm p-6 rounded-3xl shadow-xl border border-slate-200">
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-5">
+          <div>
+            <h3 className="text-lg font-bold text-slate-900">Painel detalhado</h3>
+            <p className="text-sm text-slate-500">Comparativo do periodo selecionado, com foco em pendencias e faturas.</p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <span className="px-3 py-1 rounded-full text-xs font-semibold bg-slate-100 border border-slate-200 text-slate-700">
+              {filteredTransactions.length} registros
+            </span>
+            <span className="px-3 py-1 rounded-full text-xs font-semibold bg-amber-100 border border-amber-200 text-amber-700">
+              {pendingTransactions.length} pendencias
+            </span>
+          </div>
+        </div>
+
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          <div className="p-4 rounded-xl border border-slate-100 bg-slate-50">
-            <p className="text-xs font-semibold text-slate-500 uppercase">Recebidos</p>
-            <h4 className="text-2xl font-bold text-emerald-700">
-              {monthIncomeReceived.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-            </h4>
-            <p className="text-xs text-slate-500 mt-1">A receber: {monthIncomePending.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</p>
+          <div className="p-4 rounded-2xl border border-emerald-100 bg-gradient-to-br from-emerald-50 to-white shadow-sm">
+            <p className="text-xs font-semibold text-emerald-700 uppercase">Receitas</p>
+            <p className="text-2xl font-bold text-emerald-900 mt-1">{formatCurrency(monthIncomeReceived)}</p>
+            <p className="text-xs text-emerald-700/80">A receber: {formatCurrency(monthIncomePending)}</p>
+            <div className="mt-3 h-1.5 bg-emerald-100 rounded-full overflow-hidden">
+              <div
+                className="h-full bg-emerald-500"
+                style={{ width: `${percentage(monthIncomeReceived, monthIncomeReceived + monthIncomePending)}%` }}
+              ></div>
+            </div>
           </div>
-          <div className="p-4 rounded-xl border border-slate-100 bg-slate-50">
-            <p className="text-xs font-semibold text-slate-500 uppercase">Gastos</p>
-            <h4 className="text-2xl font-bold text-rose-700">
-              {monthExpensePaid.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-            </h4>
-            <p className="text-xs text-slate-500 mt-1">Pendentes: {monthExpensePending.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</p>
+          <div className="p-4 rounded-2xl border border-rose-100 bg-gradient-to-br from-rose-50 to-white shadow-sm">
+            <p className="text-xs font-semibold text-rose-700 uppercase">Despesas</p>
+            <p className="text-2xl font-bold text-rose-900 mt-1">{formatCurrency(monthExpensePaid)}</p>
+            <p className="text-xs text-rose-700/80">Pendentes: {formatCurrency(monthExpensePending)}</p>
+            <div className="mt-3 h-1.5 bg-rose-100 rounded-full overflow-hidden">
+              <div
+                className="h-full bg-rose-500"
+                style={{ width: `${percentage(monthExpensePaid, monthExpensePaid + monthExpensePending)}%` }}
+              ></div>
+            </div>
           </div>
-          <div className="p-4 rounded-xl border border-slate-100 bg-indigo-50">
-            <p className="text-xs font-semibold text-indigo-700 uppercase">Saldo realizado</p>
-            <h4 className="text-2xl font-bold text-indigo-900">
-              {realizedBalance.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-            </h4>
-            <p className="text-xs text-indigo-700/80 mt-1">Com pendencias: {projectedBalance.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</p>
-          </div>
-          <div className="p-4 rounded-xl border border-slate-100 bg-amber-50">
+          <div className="p-4 rounded-2xl border border-amber-100 bg-gradient-to-br from-amber-50 to-white shadow-sm">
             <p className="text-xs font-semibold text-amber-700 uppercase">Faturas do mes</p>
-            <h4 className="text-2xl font-bold text-amber-700">
-              {monthInvoices.reduce((sum, inv) => sum + inv.total, 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-            </h4>
-            <p className="text-xs text-amber-700/80 mt-1">Em aberto: {openInvoiceValue.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</p>
+            <p className="text-2xl font-bold text-amber-900 mt-1">
+              {formatCurrency(monthInvoices.reduce((sum, inv) => sum + inv.total, 0))}
+            </p>
+            <p className="text-xs text-amber-700/80">Em aberto: {formatCurrency(openInvoiceValue)}</p>
+            <div className="mt-3 h-1.5 bg-amber-100 rounded-full overflow-hidden">
+              <div
+                className="h-full bg-amber-500"
+                style={{
+                  width: `${percentage(
+                    monthInvoices.reduce((sum, inv) => sum + (inv.status === 'PAID' ? inv.total : 0), 0),
+                    monthInvoices.reduce((sum, inv) => sum + inv.total, 0)
+                  )}%`,
+                }}
+              ></div>
+            </div>
+          </div>
+          <div className="p-4 rounded-2xl border border-indigo-100 bg-gradient-to-br from-indigo-50 via-white to-white shadow-sm">
+            <p className="text-xs font-semibold text-indigo-700 uppercase">Caixa</p>
+            <p className="text-2xl font-bold text-indigo-900 mt-1">{formatCurrency(projectedBalance)}</p>
+            <p className="text-xs text-indigo-700/80">Realizado: {formatCurrency(realizedBalance)}</p>
+            <div className="mt-3 h-1.5 bg-indigo-100 rounded-full overflow-hidden">
+              <div
+                className="h-full bg-indigo-500"
+                style={{
+                  width: `${percentage(realizedBalance, projectedBalance === 0 ? 1 : projectedBalance)}%`,
+                }}
+              ></div>
+            </div>
           </div>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mt-6">
-          <div className="p-4 rounded-xl border border-slate-100 bg-white">
+          <div className="p-4 rounded-2xl border border-slate-200 bg-gradient-to-br from-slate-50 to-white shadow-sm">
             <div className="flex items-center justify-between mb-3">
               <div>
                 <p className="text-xs uppercase font-semibold text-slate-500">Pagos vs pendentes</p>
@@ -657,30 +794,28 @@ export const TransactionManager: React.FC<TransactionManagerProps> = ({
               </span>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              <div className="bg-emerald-50 border border-emerald-100 rounded-xl p-3">
+              <div className="bg-white border border-emerald-100 rounded-xl p-3 shadow-sm">
                 <p className="text-[11px] font-semibold text-emerald-700 uppercase">Pagos</p>
                 {paidNonCard.slice(0, 4).map((t) => (
-                  <div key={t.id} className="mt-2 p-2 rounded-lg bg-white border border-emerald-100">
+                  <div key={t.id} className="mt-2 p-2 rounded-lg bg-emerald-50 border border-emerald-100">
                     <div className="flex items-center justify-between">
                       <span className="text-sm font-semibold text-slate-800 truncate">{t.description}</span>
-                      <span className="text-xs text-emerald-700">
-                        {t.amount.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-                      </span>
+                      <span className="text-xs text-emerald-700">{formatCurrency(t.amount)}</span>
                     </div>
-                    <p className="text-[11px] text-slate-500">{new Date(t.date).toLocaleDateString('pt-BR')} - {t.category}</p>
+                    <p className="text-[11px] text-slate-500">
+                      {new Date(t.date).toLocaleDateString('pt-BR')} - {t.category}
+                    </p>
                   </div>
                 ))}
                 {paidNonCard.length === 0 && <p className="text-xs text-slate-500 mt-2">Nenhum pago ainda.</p>}
               </div>
-              <div className="bg-amber-50 border border-amber-100 rounded-xl p-3">
+              <div className="bg-white border border-amber-100 rounded-xl p-3 shadow-sm">
                 <p className="text-[11px] font-semibold text-amber-700 uppercase">Pendentes</p>
                 {pendingNonCard.slice(0, 4).map((t) => (
-                  <div key={t.id} className="mt-2 p-2 rounded-lg bg-white border border-amber-100">
+                  <div key={t.id} className="mt-2 p-2 rounded-lg bg-amber-50 border border-amber-100">
                     <div className="flex items-center justify-between">
                       <span className="text-sm font-semibold text-slate-800 truncate">{t.description}</span>
-                      <span className="text-xs text-amber-700">
-                        {t.amount.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-                      </span>
+                      <span className="text-xs text-amber-700">{formatCurrency(t.amount)}</span>
                     </div>
                     <p className="text-[11px] text-slate-500">
                       {new Date(t.date).toLocaleDateString('pt-BR')} - {t.category}
@@ -697,13 +832,13 @@ export const TransactionManager: React.FC<TransactionManagerProps> = ({
               </div>
             </div>
           </div>
-          <div className="p-4 rounded-xl border border-slate-100 bg-white">
+          <div className="p-4 rounded-2xl border border-indigo-100 bg-gradient-to-br from-indigo-50 via-white to-white shadow-sm">
             <div className="flex items-center justify-between mb-3">
               <div>
                 <p className="text-xs uppercase font-semibold text-slate-500">Faturas do mes</p>
                 <h4 className="text-sm font-bold text-slate-800">Cartao, vencimento e status</h4>
               </div>
-              <span className="text-xs px-3 py-1 rounded-full bg-slate-100 text-slate-700 border border-slate-200">
+              <span className="text-xs px-3 py-1 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-100">
                 {monthInvoices.length} faturas
               </span>
             </div>
@@ -712,19 +847,15 @@ export const TransactionManager: React.FC<TransactionManagerProps> = ({
             ) : (
               <div className="space-y-3">
                 {monthInvoices.map((inv) => (
-                  <div key={inv.key} className="p-3 rounded-xl border border-slate-100 bg-slate-50">
+                  <div key={inv.key} className="p-3 rounded-xl border border-indigo-100 bg-white shadow-sm">
                     <div className="flex items-start justify-between gap-3">
                       <div>
                         <p className="text-sm font-semibold text-slate-800">{inv.cardName}</p>
-                        <p className="text-xs text-slate-500">
-                          Vence em {inv.dueDate.toLocaleDateString('pt-BR')}
-                        </p>
+                        <p className="text-xs text-slate-500">Vence em {inv.dueDate.toLocaleDateString('pt-BR')}</p>
                         <p className="text-xs text-slate-500">{inv.items.length} compras</p>
                       </div>
                       <div className="text-right">
-                        <p className="text-base font-bold text-slate-800">
-                          {inv.total.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-                        </p>
+                        <p className="text-base font-bold text-slate-800">{formatCurrency(inv.total)}</p>
                         <span
                           className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-[11px] font-semibold ${
                             inv.status === 'PAID'
@@ -760,15 +891,16 @@ export const TransactionManager: React.FC<TransactionManagerProps> = ({
                     {expandedInvoices[inv.key] && (
                       <div className="mt-2 space-y-1">
                         {inv.items.map((item) => (
-                          <div key={item.id} className="flex items-center justify-between text-xs bg-white p-2 rounded-lg border border-slate-100">
+                          <div
+                            key={item.id}
+                            className="flex items-center justify-between text-xs bg-indigo-50/60 p-2 rounded-lg border border-indigo-100"
+                          >
                             <div className="flex items-center gap-2">
                               <CardIcon size={12} className="text-indigo-500" />
                               <span className="font-semibold text-slate-800">{item.description}</span>
                             </div>
                             <div className="text-right">
-                              <p className="font-bold text-slate-800">
-                                {item.amount.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-                              </p>
+                              <p className="font-bold text-slate-800">{formatCurrency(item.amount)}</p>
                               <p className="text-[10px] text-slate-500">
                                 {new Date(item.date).toLocaleDateString('pt-BR')}
                                 {item.purchaseDate ? ` - compra ${new Date(item.purchaseDate).toLocaleDateString('pt-BR')}` : ''}
@@ -787,26 +919,24 @@ export const TransactionManager: React.FC<TransactionManagerProps> = ({
                 onClick={() => setShowFutureInvoices((v) => !v)}
                 className="text-xs text-indigo-700 flex items-center gap-2"
               >
-                <ChevronDown
-                  size={12}
-                  className={`${showFutureInvoices ? 'rotate-180' : ''} transition-transform`}
-                />
+                <ChevronDown size={12} className={`${showFutureInvoices ? 'rotate-180' : ''} transition-transform`} />
                 Mostrar proximas faturas
               </button>
               {showFutureInvoices && (
                 <div className="mt-3 space-y-2">
                   {futureInvoices.length === 0 && <p className="text-xs text-slate-500">Nenhuma fatura futura cadastrada.</p>}
                   {futureInvoices.map((inv) => (
-                    <div key={inv.key} className="flex items-center justify-between p-2 rounded-lg bg-slate-50 border border-slate-100">
+                    <div
+                      key={inv.key}
+                      className="flex items-center justify-between p-2 rounded-lg bg-indigo-50/60 border border-indigo-100"
+                    >
                       <div>
                         <p className="text-sm font-semibold text-slate-800">{inv.cardName}</p>
                         <p className="text-[11px] text-slate-500">
                           {inv.dueDate.toLocaleDateString('pt-BR')} - {inv.items.length} compras
                         </p>
                       </div>
-                      <p className="text-sm font-bold text-slate-800">
-                        {inv.total.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-                      </p>
+                      <p className="text-sm font-bold text-slate-800">{formatCurrency(inv.total)}</p>
                     </div>
                   ))}
                 </div>
@@ -816,9 +946,9 @@ export const TransactionManager: React.FC<TransactionManagerProps> = ({
         </div>
       </div>
 
-      <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-100 space-y-3">
+      <div id="import-ai" className="bg-white/95 backdrop-blur-sm p-5 rounded-3xl shadow-lg border border-slate-200 space-y-3">
         <div className="flex items-start gap-3">
-          <div className="p-2 rounded-lg bg-indigo-50 text-indigo-600">
+          <div className="p-2 rounded-lg bg-slate-900 text-white">
             <Wand2 size={18} />
           </div>
           <div className="flex-1 space-y-2">
@@ -865,13 +995,21 @@ export const TransactionManager: React.FC<TransactionManagerProps> = ({
         </div>
       </div>
       {/* Filters */}
-      <div className="bg-gradient-to-r from-indigo-50 via-white to-emerald-50 p-4 rounded-2xl border border-slate-100 shadow-sm">
-        <div className="flex flex-col gap-3">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2 text-slate-700 font-semibold text-sm">
-              <Search size={16} className="text-indigo-500" />
-              Filtros rapidos
+      <div className="rounded-3xl border border-slate-200 bg-white/90 backdrop-blur-sm shadow-lg p-4 md:p-5">
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <div className="p-2 rounded-xl bg-indigo-50 text-indigo-600">
+              <Search size={16} />
             </div>
+            <div>
+              <p className="text-sm font-semibold text-slate-800">Painel de filtros</p>
+              <p className="text-xs text-slate-500">Use busca, status e o mes atual para refinar a lista.</p>
+            </div>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <span className="text-[11px] px-3 py-1 rounded-full bg-slate-100 border border-slate-200 text-slate-600">
+              {referenceLabel}
+            </span>
             <button
               onClick={() => {
                 setSearchTerm('');
@@ -882,21 +1020,20 @@ export const TransactionManager: React.FC<TransactionManagerProps> = ({
               Limpar filtros
             </button>
           </div>
+        </div>
 
-          <div className="flex flex-col md:flex-row gap-3">
-            <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 w-5 h-5" />
-              <input
-                type="text"
-                placeholder="Buscar transacoes..."
-                className="w-full pl-10 pr-4 py-2 bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-sm"
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-              />
-            </div>
+        <div className="flex flex-col lg:flex-row gap-3 mt-3">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 w-5 h-5" />
+            <input
+              type="text"
+              placeholder="Buscar transacoes..."
+              className="w-full pl-10 pr-4 py-2 bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-sm"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+            />
           </div>
-
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap gap-2 items-center">
             {[
               { key: 'all', label: 'Todas' },
               { key: 'pending', label: 'Pendentes' },
@@ -907,7 +1044,7 @@ export const TransactionManager: React.FC<TransactionManagerProps> = ({
                 onClick={() => setStatusFilter(tab.key as 'all' | 'pending' | 'paid')}
                 className={`px-3 py-1.5 rounded-full text-sm font-semibold transition-all border ${
                   statusFilter === tab.key
-                    ? 'bg-indigo-600 text-white border-indigo-600 shadow-md'
+                    ? 'bg-indigo-600 text-white border-indigo-600 shadow-md shadow-indigo-200'
                     : 'bg-white text-slate-600 border-slate-200 hover:border-indigo-200'
                 }`}
               >
@@ -919,13 +1056,13 @@ export const TransactionManager: React.FC<TransactionManagerProps> = ({
       </div>
 
       {/* Pending overview */}
-      <div className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm">
-        <div className="flex items-center justify-between mb-3">
+      <div className="bg-gradient-to-br from-amber-50 via-white to-white p-4 rounded-3xl border border-amber-100 shadow-lg">
+        <div className="flex items-center justify-between mb-4">
           <div>
-            <p className="text-xs uppercase font-semibold text-slate-500">Valores pendentes</p>
-            <h3 className="text-lg font-bold text-slate-800">Compras no cartao e parcelas futuras do mes</h3>
+            <p className="text-xs uppercase font-semibold text-amber-700">Valores pendentes</p>
+            <h3 className="text-lg font-bold text-slate-800">Cartao e parcelas futuras do periodo</h3>
           </div>
-          <span className="text-sm font-semibold text-amber-700 bg-amber-100 px-3 py-1 rounded-full border border-amber-200">
+          <span className="text-sm font-semibold text-amber-700 bg-white px-3 py-1 rounded-full border border-amber-200 shadow-sm">
             {pendingTransactions.length} itens
           </span>
         </div>
@@ -935,16 +1072,20 @@ export const TransactionManager: React.FC<TransactionManagerProps> = ({
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             {pendingTransactions.slice(0, 6).map((t) => (
-              <div key={t.id} className="p-3 rounded-xl border border-slate-100 bg-gradient-to-r from-amber-50 to-white flex items-center justify-between">
-                <div>
+              <div
+                key={t.id}
+                className="p-3 rounded-2xl border border-amber-100 bg-white/80 flex items-center justify-between shadow-sm"
+              >
+                <div className="space-y-1">
                   <p className="text-sm font-semibold text-slate-800">{t.description}</p>
                   <p className="text-xs text-slate-500">
-                    {new Date(t.date).toLocaleDateString('pt-BR')} - {t.category} - {paymentLabels[t.paymentMethod as PaymentMethod] || t.paymentMethod}
+                    {new Date(t.date).toLocaleDateString('pt-BR')} · {t.category} ·{' '}
+                    {paymentLabels[t.paymentMethod as PaymentMethod] || t.paymentMethod}
                   </p>
                   {!t.cardId && (
                     <button
                       onClick={() => updateStatus([t.id], 'PAID')}
-                      className="text-[11px] text-emerald-700 hover:underline mt-1"
+                      className="text-[11px] text-emerald-700 hover:underline"
                     >
                       Marcar como pago
                     </button>
@@ -953,9 +1094,13 @@ export const TransactionManager: React.FC<TransactionManagerProps> = ({
                 <div className="text-right">
                   <p className="text-base font-bold text-amber-700">
                     {t.type === TransactionType.EXPENSE ? '-' : '+'}
-                    {t.amount.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                    {formatCurrency(t.amount)}
                   </p>
-                  {t.isInstallment && <p className="text-[11px] text-slate-500">Parcela {t.installmentCurrent}/{t.installmentTotal}</p>}
+                  {t.isInstallment && (
+                    <p className="text-[11px] text-slate-500">
+                      Parcela {t.installmentCurrent}/{t.installmentTotal}
+                    </p>
+                  )}
                 </div>
               </div>
             ))}
@@ -964,20 +1109,20 @@ export const TransactionManager: React.FC<TransactionManagerProps> = ({
       </div>
 
       {/* List */}
-      <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
+      <div className="bg-white/95 backdrop-blur-sm rounded-3xl shadow-xl border border-slate-200 overflow-hidden">
         <table className="w-full">
-          <thead className="bg-slate-50 border-b border-slate-100">
+          <thead className="bg-slate-900 text-slate-100 border-b border-slate-200/50">
             <tr>
-              <th className="text-left py-4 px-6 text-xs font-semibold text-slate-500 uppercase">Descricao</th>
-              <th className="text-left py-4 px-6 text-xs font-semibold text-slate-500 uppercase">Detalhes</th>
-              <th className="text-left py-4 px-6 text-xs font-semibold text-slate-500 uppercase">Data</th>
-              <th className="text-right py-4 px-6 text-xs font-semibold text-slate-500 uppercase">Valor</th>
+              <th className="text-left py-4 px-6 text-xs font-semibold uppercase tracking-wide">Descricao</th>
+              <th className="text-left py-4 px-6 text-xs font-semibold uppercase tracking-wide">Detalhes</th>
+              <th className="text-left py-4 px-6 text-xs font-semibold uppercase tracking-wide">Data</th>
+              <th className="text-right py-4 px-6 text-xs font-semibold uppercase tracking-wide">Valor</th>
               <th className="w-10"></th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
             {filteredTransactions.map((t) => (
-              <tr key={t.id} className="hover:bg-slate-50 transition-colors">
+              <tr key={t.id} className="hover:bg-indigo-50/50 transition-colors">
                 <td className="py-4 px-6">
                   <div className="flex items-center gap-3">
                     <div
