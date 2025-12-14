@@ -8,10 +8,11 @@ interface TransactionManagerProps {
   cards: CreditCard[];
   onAdd: (transactions: Omit<Transaction, 'id'>[]) => void; // Modified to accept array
   onDelete: (id: string) => void;
+  onDeleteMany: (ids: string[]) => void;
   onImportFromFile: (payload: { file?: File | null; description?: string; instructions?: string }) => Promise<void>;
 }
 
-export const TransactionManager: React.FC<TransactionManagerProps> = ({ transactions, cards, onAdd, onDelete, onImportFromFile }) => {
+export const TransactionManager: React.FC<TransactionManagerProps> = ({ transactions, cards, onAdd, onDelete, onDeleteMany, onImportFromFile }) => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedMonth, setSelectedMonth] = useState<string>('all');
@@ -204,6 +205,25 @@ export const TransactionManager: React.FC<TransactionManagerProps> = ({ transact
     () => transactions.filter(t => (t.status || 'PENDING') === 'PAID').reduce((acc, t) => acc + t.amount, 0),
     [transactions]
   );
+
+  const getInstallmentGroupKey = (tx: Transaction) => {
+    const total = tx.installmentTotal || 0;
+    if (!(tx.isInstallment || total > 1)) return null;
+    const base = (tx.description || '').replace(/\s*\(\d+\/\d+\)\s*$/, '').trim().toLowerCase();
+    const cardMarker = tx.cardId || '';
+    return `${base}__${total}__${cardMarker}`;
+  };
+
+  const handleDeleteInstallments = (tx: Transaction) => {
+    const key = getInstallmentGroupKey(tx);
+    if (!key) {
+      onDelete(tx.id);
+      return;
+    }
+    const ids = transactions.filter((item) => getInstallmentGroupKey(item) === key).map((item) => item.id);
+    const uniqueIds = Array.from(new Set(ids.length ? ids : [tx.id]));
+    onDeleteMany(uniqueIds);
+  };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -489,6 +509,15 @@ export const TransactionManager: React.FC<TransactionManagerProps> = ({ transact
                       <span className="flex items-center gap-1 text-xs text-indigo-600">
                         <CardIcon size={10} /> Cartão
                       </span>
+                    )}
+                    {(t.isInstallment || (t.installmentTotal || 0) > 1) && (
+                      <button
+                        onClick={() => handleDeleteInstallments(t)}
+                        className="text-[11px] text-rose-600 hover:underline w-fit"
+                        title="Remover todas as parcelas desta compra"
+                      >
+                        Apagar parcelas
+                      </button>
                     )}
                   </div>
                 </td>

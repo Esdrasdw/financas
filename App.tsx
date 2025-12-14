@@ -159,13 +159,23 @@ const App: React.FC = () => {
     }
   };
 
-  const deleteTransaction = async (id: string) => {
-    setTransactions((prev) => prev.filter((t) => t.id !== id));
+  const deleteTransactions = async (ids: string[]) => {
+    const uniqueIds = Array.from(new Set(ids));
+    if (!uniqueIds.length) return;
+    setTransactions((prev) => prev.filter((t) => !uniqueIds.includes(t.id)));
     try {
-      await api.deleteTransaction(id);
+      if (uniqueIds.length === 1) {
+        await api.deleteTransaction(uniqueIds[0]);
+      } else {
+        await api.deleteTransactions(uniqueIds);
+      }
     } catch (error: any) {
-      setGlobalError(error?.message || "Erro ao remover a transacao no servidor.");
+      setGlobalError(error?.message || "Erro ao remover transacao no servidor.");
     }
+  };
+
+  const deleteTransaction = async (id: string) => {
+    await deleteTransactions([id]);
   };
 
   const addCard = async (card: CreditCardType) => {
@@ -281,6 +291,7 @@ const App: React.FC = () => {
             cards={cards}
             onAdd={addTransactions}
             onDelete={deleteTransaction}
+            onDeleteMany={deleteTransactions}
             onImportFromFile={importTransactionsFromFile}
           />
         );

@@ -76,6 +76,13 @@ export const api = {
     await apiRequest<void>(`/transactions/${id}`, { method: "DELETE" });
   },
 
+  async deleteTransactions(ids: string[]) {
+    await apiRequest<void>("/transactions/delete", {
+      method: "POST",
+      body: JSON.stringify({ ids }),
+    });
+  },
+
   async addCard(card: CreditCard) {
     return apiRequest<{ card: CreditCard }>("/cards", {
       method: "POST",

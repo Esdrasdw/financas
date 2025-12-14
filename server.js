@@ -77,7 +77,9 @@ const AI_IMPORT_SYSTEM_PROMPT =
     "- Use INCOME para salarios, recebimentos, reembolsos ou entradas; EXPENSE para faturas, boletos, impostos ou compras.",
     "- Categorize de forma simples: Salario, Moradia, Alimentacao, Transporte, Lazer, Investimentos, Impostos, Taxas, Compras, Outros.",
     "- Preencha paymentMethod quando possivel: PIX (transferencia/PIX), CASH (dinheiro) ou CARD (cartao).",
-    "- Compras parceladas: marque isInstallment=true, informe installmentTotal e installmentsPaid se ja houve pagamento.",
+    "- Se for fatura/extrato de cartao: considere apenas gastos (type=EXPENSE), ignore pagamentos/limites/creditos e use paymentMethod=CARD e status=PENDING.",
+    "- Compras parceladas: marque isInstallment=true, informe installmentTotal e installmentsPaid se ja houve pagamento. amount DEVE ser o valor de cada parcela (nao divida o valor informado).",
+    "- Escreva descricoes curtas e limpas (ate 40 caracteres), sem sufixos tecnicos ou codigos de autorizacao.",
     "- Pagamentos futuros/fatura aberta: status deve ser PENDING.",
     "- Pode retornar varias transacoes (varios produtos) no mesmo JSON; cada item representa um lancamento ou compra/parcelamento.",
     "- Se o arquivo for um resumo geral (ex: limite do cartao), ignore e retorne lista vazia.",
@@ -278,6 +280,33 @@ function ensureFinances(db, userId) {
     db.finances[userId] = { ...defaults, ...db.finances[userId] };
   }
   return db.finances[userId];
+}
+
+// Serializa operacoes de escrita para evitar que requests concorrentes sobrescrevam o estado
+let dbQueue = Promise.resolve();
+function runWithDbLock(task) {
+  const run = dbQueue.then(async () => {
+    const db = await loadDB();
+    const result = await task(db);
+    await saveDB(db);
+    return result;
+  });
+
+  // Mantem a fila viva mesmo que uma execucao falhe
+  dbQueue = run.catch((error) => {
+    console.error("DB task failed:", error);
+  });
+
+  return run;
+}
+
+function updateUserFinances(userId, mutator) {
+  return runWithDbLock(async (db) => {
+    const finances = ensureFinances(db, userId);
+    const result = await mutator(finances, db);
+    db.finances[userId] = finances;
+    return result;
+  });
 }
 
 function signToken(userId) {
@@ -570,6 +599,11 @@ app.post("/api/ai/import-transactions", authMiddleware, async (req, res) => {
   const truncatedText = safeText.slice(0, 15000);
   const instructionsText = (instructions || "").toString().trim() || "Sem instrucoes adicionais";
   const sourceLabel = hasFile && fileName ? fileName : "descricao-manual.txt";
+  const detectionText = `${sourceLabel} ${instructionsText} ${safeText.slice(0, 600)}`.toLowerCase();
+  const isCardInvoice = /fatura|cart[aã]o|cartao|credit card|invoice/.test(detectionText);
+  const systemHint = isCardInvoice
+    ? "Observacao do sistema: conteudo parece fatura/extrato de cartao; retorne apenas gastos do cartao, sem pagamentos ou creditos."
+    : "";
 
   try {
     const completion = await openai.chat.completions.create({
@@ -582,10 +616,13 @@ app.post("/api/ai/import-transactions", authMiddleware, async (req, res) => {
             `Arquivo/Descricao: ${sourceLabel}`,
             `Data de referencia (para lancamentos sem data explicita): ${referenceDate}`,
             `Instrucoes do usuario: ${instructionsText}`,
+            systemHint,
             "",
             "Conteudo lido (pode estar resumido):",
             truncatedText,
-          ].join("\n"),
+          ]
+            .filter(Boolean)
+            .join("\n"),
         },
       ],
       response_format: { type: "json_object" },
@@ -600,13 +637,14 @@ app.post("/api/ai/import-transactions", authMiddleware, async (req, res) => {
     }
 
     const rawTransactions = Array.isArray(parsed.transactions) ? parsed.transactions : [];
-    const normalized = rawTransactions.flatMap((tx) => expandInstallmentsFromAi({ ...tx, date: tx.date || referenceDate }, referenceDate));
+    const normalized = rawTransactions.flatMap((tx) => {
+      const baseTx = isCardInvoice ? { ...tx, type: "EXPENSE", paymentMethod: "CARD", status: "PENDING" } : tx;
+      return expandInstallmentsFromAi({ ...baseTx, date: baseTx.date || referenceDate }, referenceDate);
+    });
 
-    const db = await loadDB();
-    const finances = ensureFinances(db, req.userId);
-    finances.transactions = [...normalized, ...finances.transactions];
-    db.finances[req.userId] = finances;
-    await saveDB(db);
+    await updateUserFinances(req.userId, (finances) => {
+      finances.transactions = [...normalized, ...finances.transactions];
+    });
 
     return res.status(201).json({
       transactions: normalized,
@@ -621,38 +659,36 @@ app.post("/api/ai/import-transactions", authMiddleware, async (req, res) => {
 
 app.post("/api/ai/transactions/manage", authMiddleware, async (req, res) => {
   const { deleteIds, updates, creates } = req.body || {};
-  const db = await loadDB();
-  const finances = ensureFinances(db, req.userId);
-  let changed = false;
+  const result = await updateUserFinances(req.userId, (finances) => {
+    let changed = false;
 
-  if (Array.isArray(deleteIds) && deleteIds.length) {
-    finances.transactions = finances.transactions.filter((t) => !deleteIds.includes(t.id));
-    changed = true;
-  }
+    if (Array.isArray(deleteIds) && deleteIds.length) {
+      const uniqueIds = Array.from(new Set(deleteIds));
+      finances.transactions = finances.transactions.filter((t) => !uniqueIds.includes(t.id));
+      changed = true;
+    }
 
-  if (Array.isArray(updates)) {
-    updates.forEach((tx) => {
-      if (!tx?.id) return;
-      const index = finances.transactions.findIndex((t) => t.id === tx.id);
-      if (index !== -1) {
-        finances.transactions[index] = normalizeTransaction({ ...finances.transactions[index], ...tx, id: tx.id });
-        changed = true;
-      }
-    });
-  }
+    if (Array.isArray(updates)) {
+      updates.forEach((tx) => {
+        if (!tx?.id) return;
+        const index = finances.transactions.findIndex((t) => t.id === tx.id);
+        if (index !== -1) {
+          finances.transactions[index] = normalizeTransaction({ ...finances.transactions[index], ...tx, id: tx.id });
+          changed = true;
+        }
+      });
+    }
 
-  if (Array.isArray(creates)) {
-    const newOnes = creates.map((tx) => normalizeTransaction(tx));
-    finances.transactions = [...newOnes, ...finances.transactions];
-    changed = true;
-  }
+    if (Array.isArray(creates)) {
+      const newOnes = creates.map((tx) => normalizeTransaction(tx));
+      finances.transactions = [...newOnes, ...finances.transactions];
+      changed = true;
+    }
 
-  if (changed) {
-    db.finances[req.userId] = finances;
-    await saveDB(db);
-  }
+    return { changed, transactions: finances.transactions };
+  });
 
-  return res.json({ transactions: finances.transactions });
+  return res.json({ transactions: result?.transactions || [] });
 });
 
 app.post("/api/auth/register", async (req, res) => {
@@ -730,133 +766,135 @@ app.post("/api/transactions/bulk", authMiddleware, async (req, res) => {
     return res.status(400).json({ message: "transactions deve ser uma lista" });
   }
 
-  const db = await loadDB();
-  const finances = ensureFinances(db, req.userId);
   const created = transactions.map(normalizeTransaction);
-  finances.transactions = [...created, ...finances.transactions];
-  db.finances[req.userId] = finances;
-  await saveDB(db);
+  await updateUserFinances(req.userId, (finances) => {
+    finances.transactions = [...created, ...finances.transactions];
+  });
   return res.status(201).json({ transactions: created });
 });
 
 app.delete("/api/transactions/:id", authMiddleware, async (req, res) => {
   const { id } = req.params;
-  const db = await loadDB();
-  const finances = ensureFinances(db, req.userId);
-  finances.transactions = finances.transactions.filter((t) => t.id !== id);
-  db.finances[req.userId] = finances;
-  await saveDB(db);
+  await updateUserFinances(req.userId, (finances) => {
+    finances.transactions = finances.transactions.filter((t) => t.id !== id);
+  });
+  return res.status(204).end();
+});
+
+app.post("/api/transactions/delete", authMiddleware, async (req, res) => {
+  const { ids } = req.body || {};
+  if (!Array.isArray(ids) || !ids.length) {
+    return res.status(400).json({ message: "ids deve ser uma lista com ao menos um item" });
+  }
+
+  const uniqueIds = Array.from(new Set(ids.filter(Boolean).map(String)));
+  await updateUserFinances(req.userId, (finances) => {
+    finances.transactions = finances.transactions.filter((t) => !uniqueIds.includes(t.id));
+  });
+
   return res.status(204).end();
 });
 
 app.post("/api/cards", authMiddleware, async (req, res) => {
-  const db = await loadDB();
-  const finances = ensureFinances(db, req.userId);
   const card = normalizeCard(req.body || {});
-  finances.cards = [...finances.cards, card];
-  db.finances[req.userId] = finances;
-  await saveDB(db);
+  await updateUserFinances(req.userId, (finances) => {
+    finances.cards = [...finances.cards, card];
+  });
   return res.status(201).json({ card });
 });
 
 app.delete("/api/cards/:id", authMiddleware, async (req, res) => {
   const { id } = req.params;
-  const db = await loadDB();
-  const finances = ensureFinances(db, req.userId);
-  finances.cards = finances.cards.filter((c) => c.id !== id);
-  db.finances[req.userId] = finances;
-  await saveDB(db);
+  await updateUserFinances(req.userId, (finances) => {
+    finances.cards = finances.cards.filter((c) => c.id !== id);
+  });
   return res.status(204).end();
 });
 
 app.post("/api/investments", authMiddleware, async (req, res) => {
-  const db = await loadDB();
-  const finances = ensureFinances(db, req.userId);
   const investment = normalizeInvestment(req.body || {});
-  finances.investments = [...finances.investments, investment];
-  db.finances[req.userId] = finances;
-  await saveDB(db);
+  await updateUserFinances(req.userId, (finances) => {
+    finances.investments = [...finances.investments, investment];
+  });
   return res.status(201).json({ investment });
 });
 
 app.put("/api/investments/:id", authMiddleware, async (req, res) => {
   const { id } = req.params;
-  const db = await loadDB();
-  const finances = ensureFinances(db, req.userId);
-  const existingIndex = finances.investments.findIndex((i) => i.id === id);
-  if (existingIndex === -1) {
+  const result = await updateUserFinances(req.userId, (finances) => {
+    const existingIndex = finances.investments.findIndex((i) => i.id === id);
+    if (existingIndex === -1) {
+      return { notFound: true };
+    }
+
+    const investment = normalizeInvestment({ ...finances.investments[existingIndex], ...req.body, id });
+    finances.investments[existingIndex] = investment;
+    return { investment };
+  });
+
+  if (result?.notFound) {
     return res.status(404).json({ message: "Investimento nao encontrado" });
   }
 
-  const investment = normalizeInvestment({ ...finances.investments[existingIndex], ...req.body, id });
-  finances.investments[existingIndex] = investment;
-  db.finances[req.userId] = finances;
-  await saveDB(db);
-  return res.json({ investment });
+  return res.json({ investment: result?.investment });
 });
 
 app.delete("/api/investments/:id", authMiddleware, async (req, res) => {
   const { id } = req.params;
-  const db = await loadDB();
-  const finances = ensureFinances(db, req.userId);
-  finances.investments = finances.investments.filter((i) => i.id !== id);
-  db.finances[req.userId] = finances;
-  await saveDB(db);
+  await updateUserFinances(req.userId, (finances) => {
+    finances.investments = finances.investments.filter((i) => i.id !== id);
+  });
   return res.status(204).end();
 });
 
 app.post("/api/budgets", authMiddleware, async (req, res) => {
-  const db = await loadDB();
-  const finances = ensureFinances(db, req.userId);
   const budget = normalizeBudget(req.body || {});
-  finances.budgets = [...finances.budgets, budget];
-  db.finances[req.userId] = finances;
-  await saveDB(db);
+  await updateUserFinances(req.userId, (finances) => {
+    finances.budgets = [...finances.budgets, budget];
+  });
   return res.status(201).json({ budget });
 });
 
 app.delete("/api/budgets/:id", authMiddleware, async (req, res) => {
   const { id } = req.params;
-  const db = await loadDB();
-  const finances = ensureFinances(db, req.userId);
-  finances.budgets = finances.budgets.filter((b) => b.id !== id);
-  db.finances[req.userId] = finances;
-  await saveDB(db);
+  await updateUserFinances(req.userId, (finances) => {
+    finances.budgets = finances.budgets.filter((b) => b.id !== id);
+  });
   return res.status(204).end();
 });
 
 app.post("/api/goals", authMiddleware, async (req, res) => {
-  const db = await loadDB();
-  const finances = ensureFinances(db, req.userId);
   const goal = normalizeGoal(req.body || {});
-  finances.goals = [...finances.goals, goal];
-  db.finances[req.userId] = finances;
-  await saveDB(db);
+  await updateUserFinances(req.userId, (finances) => {
+    finances.goals = [...finances.goals, goal];
+  });
   return res.status(201).json({ goal });
 });
 
 app.put("/api/goals/:id", authMiddleware, async (req, res) => {
   const { id } = req.params;
-  const db = await loadDB();
-  const finances = ensureFinances(db, req.userId);
-  const index = finances.goals.findIndex((g) => g.id === id);
-  if (index === -1) {
+  const result = await updateUserFinances(req.userId, (finances) => {
+    const index = finances.goals.findIndex((g) => g.id === id);
+    if (index === -1) {
+      return { notFound: true };
+    }
+    const goal = normalizeGoal({ ...finances.goals[index], ...req.body, id });
+    finances.goals[index] = goal;
+    return { goal };
+  });
+
+  if (result?.notFound) {
     return res.status(404).json({ message: "Meta nao encontrada" });
   }
-  const goal = normalizeGoal({ ...finances.goals[index], ...req.body, id });
-  finances.goals[index] = goal;
-  db.finances[req.userId] = finances;
-  await saveDB(db);
-  return res.json({ goal });
+
+  return res.json({ goal: result?.goal });
 });
 
 app.delete("/api/goals/:id", authMiddleware, async (req, res) => {
   const { id } = req.params;
-  const db = await loadDB();
-  const finances = ensureFinances(db, req.userId);
-  finances.goals = finances.goals.filter((g) => g.id !== id);
-  db.finances[req.userId] = finances;
-  await saveDB(db);
+  await updateUserFinances(req.userId, (finances) => {
+    finances.goals = finances.goals.filter((g) => g.id !== id);
+  });
   return res.status(204).end();
 });
 
@@ -892,11 +930,27 @@ function expandInstallmentsFromAi(tx, referenceDate) {
   const isInstallment = tx.isInstallment || total > 1;
 
   if (!isInstallment || total <= 1) {
-    return [normalizeTransaction({ ...tx, date: tx.date || referenceDate })];
+    const baseDescription = shortenDescription(tx.description);
+    return [normalizeTransaction({ ...tx, description: baseDescription, date: tx.date || referenceDate })];
   }
 
-  const perInstallmentAmount = Number(tx.amount || 0) / total;
+  const explicitInstallmentAmount = Number(
+    tx.installmentAmount || tx.installmentValue || tx.parcela || tx.parcelValue || tx.perInstallmentAmount
+  );
+  const fullPurchaseAmount = Number(tx.totalAmount || tx.totalPurchase || tx.totalPurchaseAmount || tx.totalValue || tx.total);
+  let perInstallmentAmount =
+    Number.isFinite(explicitInstallmentAmount) && explicitInstallmentAmount > 0 ? explicitInstallmentAmount : Number(tx.amount || 0);
+
+  if (Number.isFinite(fullPurchaseAmount) && fullPurchaseAmount > 0 && total > 0) {
+    perInstallmentAmount = fullPurchaseAmount / total;
+  }
+
+  if (!Number.isFinite(perInstallmentAmount) || perInstallmentAmount <= 0) {
+    perInstallmentAmount = Number(tx.amount || 0) / (total || 1) || 0;
+  }
+
   const baseDateIso = tx.date || referenceDate;
+  const baseDescription = shortenDescription(tx.description || "Parcelado");
 
   const items = [];
   for (let i = installmentsPaid; i < total; i += 1) {
@@ -910,7 +964,7 @@ function expandInstallmentsFromAi(tx, referenceDate) {
         ...tx,
         amount: perInstallmentAmount,
         date: !Number.isNaN(new Date(baseDateIso).getTime()) ? dueDate.toISOString().split("T")[0] : referenceDate,
-        description: `${tx.description || "Parcelado"} (${installmentNumber}/${total})`,
+        description: `${baseDescription} (${installmentNumber}/${total})`,
         isInstallment: true,
         installmentCurrent: installmentNumber,
         installmentTotal: total,
@@ -965,6 +1019,14 @@ function normalizePaymentStatus(value, txInput = {}) {
     return "PENDING";
   }
   return "PAID";
+}
+
+function shortenDescription(text = "") {
+  const cleaned = String(text || "").replace(/\s+/g, " ").replace(/[|_;]+/g, " ").trim();
+  if (!cleaned) return "Transacao";
+  const compact = cleaned.split(" ").slice(0, 8).join(" ");
+  const trimmed = compact.length > 60 ? `${compact.slice(0, 57)}...` : compact;
+  return trimmed;
 }
 
 function normalizeCard(input) {
