@@ -133,7 +133,17 @@ const demoTransactions = [
 ];
 
 const demoCards = [{ id: "c1", name: "Nubank", limit: 5000, dueDay: 10, closingDay: 3, color: "bg-purple-600" }];
-const demoInvestments = [{ id: "i1", name: "Tesouro Selic", amount: 2000, type: "TESOURO", percentageOfCDI: 100, startDate: "2024-01-02" }];
+const demoInvestments = [
+  {
+    id: "i1",
+    name: "Tesouro Selic",
+    amount: 2000,
+    type: "TESOURO",
+    percentageOfCDI: 100,
+    startDate: "2024-01-02",
+    contributions: [{ id: "i1-c1", amount: 2000, date: "2024-01-02" }],
+  },
+];
 const demoBudgets = [{ id: "b1", category: "Alimentacao", limit: 800 }];
 const demoGoals = [
   { id: "g1", title: "Reserva de Emergencia", target: 15000, current: 4500, deadline: "2025-12-31", category: "Seguranca" },
@@ -261,6 +271,9 @@ function ensureDbShape(db) {
     const withDefaults = { ...defaults, ...current };
     withDefaults.transactions = Array.isArray(withDefaults.transactions)
       ? withDefaults.transactions.map(normalizeTransaction)
+      : [];
+    withDefaults.investments = Array.isArray(withDefaults.investments)
+      ? withDefaults.investments.map(normalizeInvestment)
       : [];
     normalized.finances[userId] = withDefaults;
   });
@@ -1031,6 +1044,16 @@ function shortenDescription(text = "") {
   return trimmed;
 }
 
+function normalizeContribution(input = {}, fallbackDate) {
+  const date = input.date || fallbackDate || new Date().toISOString().split("T")[0];
+  return {
+    id: input.id || randomUUID(),
+    amount: Number(input.amount) || 0,
+    date,
+    note: input.note ? String(input.note) : undefined,
+  };
+}
+
 function normalizeCard(input) {
   return {
     id: input.id || randomUUID(),
@@ -1043,13 +1066,27 @@ function normalizeCard(input) {
 }
 
 function normalizeInvestment(input) {
+  const baseDate = input.startDate || input.date || new Date().toISOString().split("T")[0];
+  const contributions = Array.isArray(input.contributions)
+    ? input.contributions.map((c) => normalizeContribution(c, baseDate)).filter((c) => c.amount > 0)
+    : [];
+
+  if (!contributions.length && Number(input.amount)) {
+    contributions.push(normalizeContribution({ amount: Number(input.amount), date: baseDate }, baseDate));
+  }
+
+  contributions.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+  const totalAmount = contributions.reduce((sum, c) => sum + (Number(c.amount) || 0), 0);
+  const startDate = contributions.length ? contributions[0].date : baseDate;
+
   return {
     id: input.id || randomUUID(),
     name: input.name || "Investimento",
-    amount: Number(input.amount) || 0,
+    amount: totalAmount,
     type: input.type || "CDB",
     percentageOfCDI: Number(input.percentageOfCDI) || 100,
-    startDate: input.startDate || new Date().toISOString().split("T")[0],
+    startDate,
+    contributions,
   };
 }
 

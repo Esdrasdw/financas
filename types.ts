@@ -33,6 +33,13 @@ export interface CreditCard {
   color: string;
 }
 
+export interface Contribution {
+  id: string;
+  amount: number;
+  date: string;
+  note?: string;
+}
+
 export interface Investment {
   id: string;
   name: string;
@@ -40,6 +47,7 @@ export interface Investment {
   type: 'CDB' | 'LCI' | 'LCA' | 'TESOURO' | 'ACOES' | 'FII';
   percentageOfCDI: number;
   startDate: string;
+  contributions?: Contribution[];
 }
 
 export interface Budget {
