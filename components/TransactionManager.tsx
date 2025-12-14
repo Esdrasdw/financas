@@ -142,6 +142,7 @@ export const TransactionManager: React.FC<TransactionManagerProps> = ({
   const [importText, setImportText] = useState('');
   const [isImporting, setIsImporting] = useState(false);
   const [importFeedback, setImportFeedback] = useState<string | null>(null);
+  const [recurrenceMonths, setRecurrenceMonths] = useState(12);
 
   const paymentLabels: Record<PaymentMethod, string> = { PIX: 'PIX', CASH: 'Dinheiro', CARD: 'Cartao' };
   const statusLabels: Record<PaymentStatus, { label: string; color: string }> = {
@@ -194,7 +195,7 @@ export const TransactionManager: React.FC<TransactionManagerProps> = ({
       const baseDate = card ? dueDate : purchaseDate;
       const recurringStatus = card ? 'PENDING' : 'PAID';
       const recurrenceId = buildLocalId();
-      const monthsToGenerate = 12;
+      const monthsToGenerate = Math.max(1, recurrenceMonths || 12);
 
       for (let i = 0; i < monthsToGenerate; i += 1) {
         const currentDate = addMonths(baseDate, i);
@@ -251,6 +252,7 @@ export const TransactionManager: React.FC<TransactionManagerProps> = ({
     setDate(new Date().toISOString().split('T')[0]);
     setPaymentMethod('PIX');
     setStatus('PAID');
+    setRecurrenceMonths(12);
   };
 
   const exportCSV = () => {
@@ -1238,7 +1240,11 @@ export const TransactionManager: React.FC<TransactionManagerProps> = ({
                           className="w-4 h-4 text-indigo-600 rounded"
                           checked={recurrence === 'MONTHLY'}
                           onChange={() => {
-                            setRecurrence(recurrence === 'MONTHLY' ? 'NONE' : 'MONTHLY');
+                            const next = recurrence === 'MONTHLY' ? 'NONE' : 'MONTHLY';
+                            setRecurrence(next);
+                            if (next === 'MONTHLY' && !recurrenceMonths) {
+                              setRecurrenceMonths(12);
+                            }
                             setIsInstallment(false);
                           }}
                         />
@@ -1246,6 +1252,21 @@ export const TransactionManager: React.FC<TransactionManagerProps> = ({
                         <span className="text-sm font-bold text-slate-700">Recorrente (Mensal)</span>
                       </div>
                       <p className="text-xs text-slate-500 pl-6">Repete todo mes (Ex: Netflix, Aluguel)</p>
+                      {recurrence === 'MONTHLY' && (
+                        <div className="pl-6 pt-2">
+                          <label className="text-[11px] text-slate-600 font-semibold block mb-1">Duraçao</label>
+                          <select
+                            className="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
+                            value={recurrenceMonths}
+                            onChange={(e) => setRecurrenceMonths(Number(e.target.value))}
+                          >
+                            <option value={6}>6 meses</option>
+                            <option value={12}>1 ano (12 meses)</option>
+                            <option value={24}>2 anos (24 meses)</option>
+                            <option value={36}>3 anos (36 meses)</option>
+                          </select>
+                        </div>
+                      )}
                     </label>
 
                     <label
