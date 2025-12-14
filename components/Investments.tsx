@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { Contribution, Investment } from '../types';
-import { TrendingUp, Plus, BarChart3, Pencil, Trash2, X, CalendarClock, ArrowUpRight, PiggyBank, Sparkles } from 'lucide-react';
+import { TrendingUp, Plus, BarChart3, Pencil, Trash2, X, ArrowUpRight, PiggyBank, Sparkles } from 'lucide-react';
 import {
   calculateInvestmentValue,
   DEFAULT_CDI_RATE,
@@ -296,33 +296,6 @@ export const Investments: React.FC<InvestmentsProps> = ({ investments, onAdd, on
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        <div className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-slate-500 uppercase">Ganho diario</span>
-            <CalendarClock size={16} className="text-emerald-500" />
-          </div>
-          <p className="text-2xl font-bold text-slate-900 mt-2">{currency.format(snapshots.dailyGain)}</p>
-          <p className="text-xs text-slate-500">Estimado nas proximas 24h</p>
-        </div>
-        <div className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-slate-500 uppercase">Ganho semanal</span>
-            <CalendarClock size={16} className="text-indigo-500" />
-          </div>
-          <p className="text-2xl font-bold text-slate-900 mt-2">{currency.format(snapshots.weeklyGain)}</p>
-          <p className="text-xs text-slate-500">Proxima semana completa</p>
-        </div>
-        <div className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-slate-500 uppercase">Ganho anual</span>
-            <CalendarClock size={16} className="text-amber-500" />
-          </div>
-          <p className="text-2xl font-bold text-slate-900 mt-2">{currency.format(snapshots.yearlyGain)}</p>
-          <p className="text-xs text-slate-500">Projecao para 12 meses</p>
-        </div>
-      </div>
-
       <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
         <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <div className="flex items-center gap-3">
@@ -331,25 +304,37 @@ export const Investments: React.FC<InvestmentsProps> = ({ investments, onAdd, on
             </div>
             <div>
               <h3 className="font-bold text-slate-800">Projecao de rendimento</h3>
-              <p className="text-sm text-slate-500">Selecione um horizonte ate 15 anos</p>
+              <p className="text-sm text-slate-500">Ganhos projetados com CDI diario e aportes datados</p>
             </div>
           </div>
-          <div className="flex items-center gap-3">
-            <label className="text-sm text-slate-600 font-medium whitespace-nowrap">Horizonte</label>
-            <input
-              type="range"
-              min={1}
-              max={15}
-              value={projectionYears}
-              onChange={(e) => setProjectionYears(Number(e.target.value))}
-              className="w-40 accent-emerald-600"
-            />
-            <span className="text-sm font-semibold text-slate-700">
-              {projectionYears} {projectionYears === 1 ? 'ano' : 'anos'}
-            </span>
+          <div className="flex items-center gap-2 flex-wrap">
+            {([1, 3, 5, 10, 15] as const).map((yrs) => (
+              <button
+                key={yrs}
+                onClick={() => setProjectionYears(yrs)}
+                className={`px-3 py-2 rounded-full text-sm font-semibold transition ${
+                  projectionYears === yrs
+                    ? 'bg-emerald-600 text-white shadow-sm'
+                    : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                }`}
+              >
+                {yrs} {yrs === 1 ? 'ano' : 'anos'}
+              </button>
+            ))}
           </div>
         </div>
-        <div className="h-64 w-full mt-4">
+        <div className="relative h-64 w-full mt-4">
+          <div className="absolute z-10 right-3 top-3 flex gap-2 flex-wrap text-xs">
+            <span className="px-3 py-1 rounded-full bg-emerald-50 text-emerald-700 font-semibold">
+              +{currency.format(snapshots.dailyGain)} /dia
+            </span>
+            <span className="px-3 py-1 rounded-full bg-indigo-50 text-indigo-700 font-semibold">
+              +{currency.format(snapshots.weeklyGain)} /sem
+            </span>
+            <span className="px-3 py-1 rounded-full bg-amber-50 text-amber-700 font-semibold">
+              +{currency.format(snapshots.yearlyGain)} /ano
+            </span>
+          </div>
           <ResponsiveContainer width="100%" height="100%">
             <AreaChart data={projectionData}>
               <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
