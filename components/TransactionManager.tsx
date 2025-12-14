@@ -141,7 +141,7 @@ export const TransactionManager: React.FC<TransactionManagerProps> = ({
   const [isImporting, setIsImporting] = useState(false);
   const [importFeedback, setImportFeedback] = useState<string | null>(null);
 
-  const paymentLabels: Record<PaymentMethod, string> = { PIX: 'PIX', CASH: 'Dinheiro', CARD: 'Cartão' };
+  const paymentLabels: Record<PaymentMethod, string> = { PIX: 'PIX', CASH: 'Dinheiro', CARD: 'Cart?o' };
   const statusLabels: Record<PaymentStatus, { label: string; color: string }> = {
     PENDING: { label: 'Pendente', color: 'bg-amber-100 text-amber-700 border border-amber-200' },
     PAID: { label: 'Pago', color: 'bg-emerald-100 text-emerald-700 border border-emerald-200' },
@@ -312,7 +312,7 @@ export const TransactionManager: React.FC<TransactionManagerProps> = ({
           map.set(key, {
             key,
             cardId: t.cardId!,
-            cardName: card?.name || 'Cartão',
+            cardName: card?.name || 'Cart?o',
             dueDate: due,
             monthKey: monthKey(due),
             total: 0,
@@ -414,7 +414,7 @@ export const TransactionManager: React.FC<TransactionManagerProps> = ({
     setImportFeedback(null);
     try {
       await onImportFromFile({ file: selectedFile, instructions: importNotes, description: importText });
-      setImportFeedback('Transações criadas automaticamente com a IA.');
+      setImportFeedback('Transacoes criadas automaticamente com a IA.');
       setSelectedFile(null);
       setImportNotes('');
       setImportText('');
@@ -444,7 +444,7 @@ export const TransactionManager: React.FC<TransactionManagerProps> = ({
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-        <h2 className="text-2xl font-bold text-slate-800">Transações</h2>
+        <h2 className="text-2xl font-bold text-slate-800">Transacoes</h2>
         <div className="flex gap-2 flex-wrap">
           <button
             onClick={exportCSV}
@@ -459,7 +459,7 @@ export const TransactionManager: React.FC<TransactionManagerProps> = ({
             className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-xl flex items-center gap-2 transition-colors shadow-lg shadow-indigo-200"
           >
             <Plus size={20} />
-            Nova Transação
+            Nova Transacao
           </button>
         </div>
       </div>
@@ -467,28 +467,28 @@ export const TransactionManager: React.FC<TransactionManagerProps> = ({
       <div className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm flex flex-col gap-3">
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
           <div>
-            <p className="text-xs uppercase font-semibold text-slate-500">Visão mensal</p>
+            <p className="text-xs uppercase font-semibold text-slate-500">Vis?o mensal</p>
             <h3 className="text-xl font-bold text-slate-800">{referenceLabel}</h3>
-            <p className="text-xs text-slate-500">Mostrando somente transações e faturas deste mês.</p>
+            <p className="text-xs text-slate-500">Mostrando somente transacoes e faturas deste mes.</p>
           </div>
           <div className="flex items-center gap-2 flex-wrap">
             <button
               onClick={() => shiftMonth(-1)}
               className="px-3 py-2 rounded-lg border border-slate-200 bg-slate-50 text-sm flex items-center gap-2 hover:border-indigo-200"
             >
-              <ChevronLeft size={16} /> Mês anterior
+              <ChevronLeft size={16} /> M?s anterior
             </button>
             <button
               onClick={() => shiftMonth(1)}
               className="px-3 py-2 rounded-lg border border-slate-200 bg-slate-50 text-sm flex items-center gap-2 hover:border-indigo-200"
             >
-              Próximo mês <ChevronRight size={16} />
+              Proximo mes <ChevronRight size={16} />
             </button>
             <button
               onClick={() => setShowMonthSelector((v) => !v)}
               className="px-3 py-2 rounded-lg border border-indigo-200 bg-indigo-50 text-sm text-indigo-700 flex items-center gap-2"
             >
-              <ChevronDown size={14} className={`${showMonthSelector ? 'rotate-180' : ''} transition-transform`} /> Ver outro mês
+              <ChevronDown size={14} className={`${showMonthSelector ? 'rotate-180' : ''} transition-transform`} /> Ver outro mes
             </button>
           </div>
         </div>
@@ -513,7 +513,7 @@ export const TransactionManager: React.FC<TransactionManagerProps> = ({
       </div>
 
       <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-100">
-        <h3 className="text-lg font-bold text-slate-800 mb-4">Resumo do mês</h3>
+        <h3 className="text-lg font-bold text-slate-800 mb-4">Resumo do mes</h3>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           <div className="p-4 rounded-xl border border-slate-100 bg-slate-50">
             <p className="text-xs font-semibold text-slate-500 uppercase">Recebidos</p>
@@ -534,10 +534,10 @@ export const TransactionManager: React.FC<TransactionManagerProps> = ({
             <h4 className="text-2xl font-bold text-indigo-900">
               {realizedBalance.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
             </h4>
-            <p className="text-xs text-indigo-700/80 mt-1">Com pendências: {projectedBalance.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</p>
+            <p className="text-xs text-indigo-700/80 mt-1">Com pend?ncias: {projectedBalance.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</p>
           </div>
           <div className="p-4 rounded-xl border border-slate-100 bg-amber-50">
-            <p className="text-xs font-semibold text-amber-700 uppercase">Faturas do mês</p>
+            <p className="text-xs font-semibold text-amber-700 uppercase">Faturas do mes</p>
             <h4 className="text-2xl font-bold text-amber-700">
               {monthInvoices.reduce((sum, inv) => sum + inv.total, 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
             </h4>
@@ -550,7 +550,7 @@ export const TransactionManager: React.FC<TransactionManagerProps> = ({
             <div className="flex items-center justify-between mb-3">
               <div>
                 <p className="text-xs uppercase font-semibold text-slate-500">Pagos vs pendentes</p>
-                <h4 className="text-sm font-bold text-slate-800">Transações do mês (sem cartão)</h4>
+                <h4 className="text-sm font-bold text-slate-800">Transacoes do mes (sem cartao)</h4>
               </div>
               <span className="text-xs px-3 py-1 rounded-full bg-slate-100 text-slate-700 border border-slate-200">
                 {nonCardTransactions.length} itens
@@ -567,7 +567,7 @@ export const TransactionManager: React.FC<TransactionManagerProps> = ({
                         {t.amount.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
                       </span>
                     </div>
-                    <p className="text-[11px] text-slate-500">{new Date(t.date).toLocaleDateString('pt-BR')} · {t.category}</p>
+                    <p className="text-[11px] text-slate-500">{new Date(t.date).toLocaleDateString('pt-BR')} - {t.category}</p>
                   </div>
                 ))}
                 {paidNonCard.length === 0 && <p className="text-xs text-slate-500 mt-2">Nenhum pago ainda.</p>}
@@ -583,7 +583,7 @@ export const TransactionManager: React.FC<TransactionManagerProps> = ({
                       </span>
                     </div>
                     <p className="text-[11px] text-slate-500">
-                      {new Date(t.date).toLocaleDateString('pt-BR')} · {t.category}
+                      {new Date(t.date).toLocaleDateString('pt-BR')} - {t.category}
                     </p>
                     <button
                       onClick={() => updateStatus([t.id], 'PAID')}
@@ -593,22 +593,22 @@ export const TransactionManager: React.FC<TransactionManagerProps> = ({
                     </button>
                   </div>
                 ))}
-                {pendingNonCard.length === 0 && <p className="text-xs text-slate-500 mt-2">Sem pendências manuais.</p>}
+                {pendingNonCard.length === 0 && <p className="text-xs text-slate-500 mt-2">Sem pend?ncias manuais.</p>}
               </div>
             </div>
           </div>
           <div className="p-4 rounded-xl border border-slate-100 bg-white">
             <div className="flex items-center justify-between mb-3">
               <div>
-                <p className="text-xs uppercase font-semibold text-slate-500">Faturas do mês</p>
-                <h4 className="text-sm font-bold text-slate-800">Cartão, vencimento e status</h4>
+                <p className="text-xs uppercase font-semibold text-slate-500">Faturas do mes</p>
+                <h4 className="text-sm font-bold text-slate-800">Cart?o, vencimento e status</h4>
               </div>
               <span className="text-xs px-3 py-1 rounded-full bg-slate-100 text-slate-700 border border-slate-200">
                 {monthInvoices.length} faturas
               </span>
             </div>
             {monthInvoices.length === 0 ? (
-              <p className="text-sm text-slate-500">Nenhuma fatura com vencimento neste mês.</p>
+              <p className="text-sm text-slate-500">Nenhuma fatura com vencimento neste mes.</p>
             ) : (
               <div className="space-y-3">
                 {monthInvoices.map((inv) => (
@@ -671,7 +671,7 @@ export const TransactionManager: React.FC<TransactionManagerProps> = ({
                               </p>
                               <p className="text-[10px] text-slate-500">
                                 {new Date(item.date).toLocaleDateString('pt-BR')}
-                                {item.purchaseDate ? ` · compra ${new Date(item.purchaseDate).toLocaleDateString('pt-BR')}` : ''}
+                                {item.purchaseDate ? ` - compra ${new Date(item.purchaseDate).toLocaleDateString('pt-BR')}` : ''}
                               </p>
                             </div>
                           </div>
@@ -691,7 +691,7 @@ export const TransactionManager: React.FC<TransactionManagerProps> = ({
                   size={12}
                   className={`${showFutureInvoices ? 'rotate-180' : ''} transition-transform`}
                 />
-                Mostrar próximas faturas
+                Mostrar pr?ximas faturas
               </button>
               {showFutureInvoices && (
                 <div className="mt-3 space-y-2">
@@ -701,7 +701,7 @@ export const TransactionManager: React.FC<TransactionManagerProps> = ({
                       <div>
                         <p className="text-sm font-semibold text-slate-800">{inv.cardName}</p>
                         <p className="text-[11px] text-slate-500">
-                          {inv.dueDate.toLocaleDateString('pt-BR')} · {inv.items.length} compras
+                          {inv.dueDate.toLocaleDateString('pt-BR')} - {inv.items.length} compras
                         </p>
                       </div>
                       <p className="text-sm font-bold text-slate-800">
@@ -725,9 +725,9 @@ export const TransactionManager: React.FC<TransactionManagerProps> = ({
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
               <div>
                 <p className="text-sm font-semibold text-slate-800">Importar com IA (arquivo opcional)</p>
-                <p className="text-xs text-slate-500">Envie um arquivo ou apenas cole uma descricao/resumo que a IA cria as transações.</p>
+                <p className="text-xs text-slate-500">Envie um arquivo ou apenas cole uma descricao/resumo que a IA cria as transacoes.</p>
               </div>
-              <span className="text-[11px] text-slate-500">Data padrão: hoje</span>
+              <span className="text-[11px] text-slate-500">Data padr?o: hoje</span>
             </div>
 
             <div className="flex flex-col md:flex-row gap-2">
@@ -741,7 +741,7 @@ export const TransactionManager: React.FC<TransactionManagerProps> = ({
               <input
                 type="text"
                 className="flex-1 px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500 text-sm"
-                placeholder="Instruções para a IA (ex: salario de dez/2024 ou fatura nubank)"
+                placeholder="Instrucoes para a IA (ex: salario de dez/2024 ou fatura nubank)"
                 value={importNotes}
                 onChange={(e) => setImportNotes(e.target.value)}
               />
@@ -770,7 +770,7 @@ export const TransactionManager: React.FC<TransactionManagerProps> = ({
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2 text-slate-700 font-semibold text-sm">
               <Search size={16} className="text-indigo-500" />
-              Filtros rápidos
+              Filtros r?pidos
             </div>
             <button
               onClick={() => {
@@ -788,7 +788,7 @@ export const TransactionManager: React.FC<TransactionManagerProps> = ({
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 w-5 h-5" />
               <input
                 type="text"
-                placeholder="Buscar transações..."
+                placeholder="Buscar transacoes..."
                 className="w-full pl-10 pr-4 py-2 bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-sm"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
@@ -823,7 +823,7 @@ export const TransactionManager: React.FC<TransactionManagerProps> = ({
         <div className="flex items-center justify-between mb-3">
           <div>
             <p className="text-xs uppercase font-semibold text-slate-500">Valores pendentes</p>
-            <h3 className="text-lg font-bold text-slate-800">Compras no cartão e parcelas futuras do mês</h3>
+            <h3 className="text-lg font-bold text-slate-800">Compras no cartao e parcelas futuras do mes</h3>
           </div>
           <span className="text-sm font-semibold text-amber-700 bg-amber-100 px-3 py-1 rounded-full border border-amber-200">
             {pendingTransactions.length} itens
@@ -831,7 +831,7 @@ export const TransactionManager: React.FC<TransactionManagerProps> = ({
         </div>
 
         {pendingTransactions.length === 0 ? (
-          <p className="text-sm text-slate-500">Nenhuma pendência no momento.</p>
+          <p className="text-sm text-slate-500">Nenhuma pend?ncia no momento.</p>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             {pendingTransactions.slice(0, 6).map((t) => (
@@ -839,7 +839,7 @@ export const TransactionManager: React.FC<TransactionManagerProps> = ({
                 <div>
                   <p className="text-sm font-semibold text-slate-800">{t.description}</p>
                   <p className="text-xs text-slate-500">
-                    {new Date(t.date).toLocaleDateString('pt-BR')} · {t.category} · {paymentLabels[t.paymentMethod as PaymentMethod] || t.paymentMethod}
+                    {new Date(t.date).toLocaleDateString('pt-BR')} - {t.category} - {paymentLabels[t.paymentMethod as PaymentMethod] || t.paymentMethod}
                   </p>
                   {!t.cardId && (
                     <button
@@ -868,7 +868,7 @@ export const TransactionManager: React.FC<TransactionManagerProps> = ({
         <table className="w-full">
           <thead className="bg-slate-50 border-b border-slate-100">
             <tr>
-              <th className="text-left py-4 px-6 text-xs font-semibold text-slate-500 uppercase">Descrição</th>
+              <th className="text-left py-4 px-6 text-xs font-semibold text-slate-500 uppercase">Descricao</th>
               <th className="text-left py-4 px-6 text-xs font-semibold text-slate-500 uppercase">Detalhes</th>
               <th className="text-left py-4 px-6 text-xs font-semibold text-slate-500 uppercase">Data</th>
               <th className="text-right py-4 px-6 text-xs font-semibold text-slate-500 uppercase">Valor</th>
@@ -913,7 +913,7 @@ export const TransactionManager: React.FC<TransactionManagerProps> = ({
                     </span>
                     {t.cardId && (
                       <span className="flex items-center gap-1 text-xs text-indigo-600">
-                        <CardIcon size={10} /> Cartão · vence {new Date(t.date).toLocaleDateString('pt-BR')}
+                        <CardIcon size={10} /> Cart?o - vence {new Date(t.date).toLocaleDateString('pt-BR')}
                       </span>
                     )}
                     {(t.isInstallment || (t.installmentTotal || 0) > 1) && (
@@ -938,7 +938,7 @@ export const TransactionManager: React.FC<TransactionManagerProps> = ({
                         onClick={() => updateStatus([t.id], 'PENDING')}
                         className="text-[11px] text-amber-700 hover:underline w-fit"
                       >
-                        Marcar como não pago
+                        Marcar como n?o pago
                       </button>
                     )}
                   </div>
@@ -974,8 +974,8 @@ export const TransactionManager: React.FC<TransactionManagerProps> = ({
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4 overflow-y-auto">
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg overflow-hidden animate-fade-in-up my-8">
             <div className="bg-indigo-600 px-6 py-4 flex justify-between items-center">
-              <h3 className="text-white font-bold text-lg">Nova Movimentação</h3>
-              <button onClick={() => { setIsModalOpen(false); resetForm(); }} className="text-white/80 hover:text-white">×</button>
+              <h3 className="text-white font-bold text-lg">Nova Movimentacao</h3>
+              <button onClick={() => { setIsModalOpen(false); resetForm(); }} className="text-white/80 hover:text-white">?</button>
             </div>
 
             <form onSubmit={handleSubmit} className="p-6 space-y-5">
@@ -1007,14 +1007,14 @@ export const TransactionManager: React.FC<TransactionManagerProps> = ({
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Descrição</label>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Descricao</label>
                 <input
                   required
                   type="text"
                   className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
-                  placeholder="Ex: Compra Online, Salário..."
+                  placeholder="Ex: Compra Online, Sal?rio..."
                 />
               </div>
 
@@ -1059,14 +1059,14 @@ export const TransactionManager: React.FC<TransactionManagerProps> = ({
                     onChange={(e) => setCategory(e.target.value)}
                   >
                     <option>Geral</option>
-                    <option>Alimentação</option>
+                    <option>Alimentacao</option>
                     <option>Moradia</option>
                     <option>Transporte</option>
                     <option>Lazer</option>
-                    <option>Saúde</option>
-                    <option>Salário</option>
+                    <option>Sa?de</option>
+                    <option>Sal?rio</option>
                     <option>Investimentos</option>
-                    <option>Educação</option>
+                    <option>Educacao</option>
                     <option>Compras</option>
                   </select>
                 </div>
@@ -1078,12 +1078,12 @@ export const TransactionManager: React.FC<TransactionManagerProps> = ({
                     onChange={(e) => setPaymentMethod(e.target.value as PaymentMethod)}
                     disabled={type === TransactionType.EXPENSE && Boolean(selectedCardId)}
                   >
-                    <option value="PIX">PIX / Transferência</option>
+                    <option value="PIX">PIX / Transfer?ncia</option>
                     <option value="CASH">Dinheiro</option>
-                    <option value="CARD">Cartão</option>
+                    <option value="CARD">Cart?o</option>
                   </select>
                   {type === TransactionType.EXPENSE && selectedCardId && (
-                    <p className="text-[10px] text-slate-500 mt-1">Cartão selecionado define o meio de pagamento.</p>
+                    <p className="text-[10px] text-slate-500 mt-1">Cart?o selecionado define o meio de pagamento.</p>
                   )}
                 </div>
                 <div>
@@ -1100,13 +1100,13 @@ export const TransactionManager: React.FC<TransactionManagerProps> = ({
                 </div>
                 {type === TransactionType.EXPENSE && (
                   <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1">Cartão de Crédito</label>
+                    <label className="block text-sm font-medium text-slate-700 mb-1">Cart?o de Cr?dito</label>
                     <select
                       className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
                       value={selectedCardId}
                       onChange={(e) => setSelectedCardId(e.target.value)}
                     >
-                      <option value="">Nenhum / Débito</option>
+                      <option value="">Nenhum / D?bito</option>
                       {cards.map((c) => (
                         <option key={c.id} value={c.id}>
                           {c.name}
@@ -1139,7 +1139,7 @@ export const TransactionManager: React.FC<TransactionManagerProps> = ({
                         <Repeat size={16} className="text-slate-600" />
                         <span className="text-sm font-bold text-slate-700">Recorrente (Mensal)</span>
                       </div>
-                      <p className="text-xs text-slate-500 pl-6">Repete todo mês (Ex: Netflix, Aluguel)</p>
+                      <p className="text-xs text-slate-500 pl-6">Repete todo mes (Ex: Netflix, Aluguel)</p>
                     </label>
 
                     <label
@@ -1178,7 +1178,7 @@ export const TransactionManager: React.FC<TransactionManagerProps> = ({
                         />
                       </div>
                       <div>
-                        <label className="block text-xs font-bold text-slate-600 mb-1">Já pagas (colar)</label>
+                        <label className="block text-xs font-bold text-slate-600 mb-1">J? pagas (colar)</label>
                         <input
                           type="number"
                           min="0"
@@ -1200,7 +1200,7 @@ export const TransactionManager: React.FC<TransactionManagerProps> = ({
                 type="submit"
                 className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 rounded-lg transition-colors shadow-lg shadow-indigo-200"
               >
-                Confirmar Transação
+                Confirmar Transacao
               </button>
             </form>
           </div>
