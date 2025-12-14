@@ -45,7 +45,11 @@ export const CreditCards: React.FC<CreditCardsProps> = ({ cards, transactions, o
 
   const getCardOpenBalance = (cardId: string) =>
     transactions
-      .filter((t) => t.cardId === cardId && t.type === TransactionType.EXPENSE && t.status !== 'PAID')
+      .filter((t) => {
+        if (!(t.cardId === cardId && t.type === TransactionType.EXPENSE && t.status !== 'PAID')) return false;
+        const d = new Date(t.date);
+        return !Number.isNaN(d.getTime()) && monthKey(d) === currentMonthKey;
+      })
       .reduce((acc, t) => acc + t.amount, 0);
 
   const colors = [
@@ -173,5 +177,4 @@ export const CreditCards: React.FC<CreditCardsProps> = ({ cards, transactions, o
     </div>
   );
 };
-
 

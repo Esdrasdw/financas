@@ -188,24 +188,7 @@ export const TransactionManager: React.FC<TransactionManagerProps> = ({
     };
 
     const newTransactions: Omit<Transaction, 'id'>[] = [];
-    const isRecurringExpense = recurrence === 'MONTHLY' && type === TransactionType.EXPENSE;
-
-    if (isRecurringExpense) {
-      const baseDate = card ? dueDate : purchaseDate;
-      const recurringStatus = card ? 'PENDING' : 'PAID';
-      const recurrenceId = buildLocalId();
-      const monthsToGenerate = 12;
-
-      for (let i = 0; i < monthsToGenerate; i += 1) {
-        const currentDate = addMonths(baseDate, i);
-        newTransactions.push({
-          ...baseTransaction,
-          status: recurringStatus,
-          recurrenceId,
-          date: currentDate.toISOString().split('T')[0],
-        });
-      }
-    } else if (isInstallment && type === TransactionType.EXPENSE) {
+    if (isInstallment && type === TransactionType.EXPENSE) {
       const installmentAmount = baseTransaction.amount / totalInstallments;
       const remainingInstallments = totalInstallments - paidInstallments;
       const startingDate = card ? dueDate : purchaseDate;
@@ -228,6 +211,7 @@ export const TransactionManager: React.FC<TransactionManagerProps> = ({
     } else {
       newTransactions.push({
         ...baseTransaction,
+        recurrenceId: recurrence === 'MONTHLY' ? buildLocalId() : undefined,
         date: (card ? dueDate : purchaseDate).toISOString().split('T')[0],
       });
     }
@@ -271,34 +255,93 @@ export const TransactionManager: React.FC<TransactionManagerProps> = ({
     window.URL.revokeObjectURL(url);
   };
 
-  const referenceDate = useMemo(() => parseMonthKey(referenceMonth), [referenceMonth]);
+  const referenceDate = useMemo(() => (referenceMonth === 'all' ? today : parseMonthKey(referenceMonth)), [referenceMonth, today]);
   const referenceLabel = useMemo(
-    () => referenceDate.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' }),
-    [referenceDate]
+    () => (referenceMonth === 'all' ? 'Todos os meses' : referenceDate.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })),
+    [referenceMonth, referenceDate]
   );
 
   const availableMonths = useMemo(() => {
-    const keys = new Set<string>([referenceMonth, monthKey(today)]);
+    const keys = new Set<string>(['all', referenceMonth, monthKey(today)]);
     transactions.forEach((t) => {
       const d = toDate(t.date);
       if (d) keys.add(monthKey(d));
     });
-    return Array.from(keys).sort((a, b) => b.localeCompare(a));
+    return Array.from(keys).sort((a, b) => {
+      if (a === 'all') return -1;
+      if (b === 'all') return 1;
+      return b.localeCompare(a);
+    });
   }, [transactions, referenceMonth, today]);
 
   const monthTransactions = useMemo(
     () =>
-      transactions.filter((t) => {
-        const d = toDate(t.date);
-        if (!d) return false;
-        return monthKey(d) === referenceMonth;
-      }),
+      referenceMonth === 'all'
+        ? [...transactions]
+        : transactions.filter((t) => {
+            const d = toDate(t.date);
+            if (!d) return false;
+            return monthKey(d) === referenceMonth;
+          }),
     [transactions, referenceMonth]
   );
 
+  const stripInstallmentSuffix = (text = '') => text.replace(/\s*\(\d+\/\d+\)\s*$/, '').trim();
+
+  const aggregatedAllTransactions = useMemo(() => {
+    const groups = new Map<
+      string,
+      Transaction & { aggregatedCount?: number }
+    >();
+
+    transactions.forEach((t) => {
+      const isInstallmentGroup = t.isInstallment || (t.installmentTotal || 0) > 1;
+      const key = isInstallmentGroup
+        ? `installment:${getInstallmentGroupKey(t) || t.id}`
+        : t.recurrenceId
+        ? `recurrence:${t.recurrenceId}`
+        : t.id;
+      const existing = groups.get(key);
+      const baseDescription = stripInstallmentSuffix(t.description) || t.description;
+
+      if (!existing) {
+        groups.set(key, {
+          ...t,
+          id: key,
+          description: baseDescription,
+          amount: t.amount,
+          aggregatedCount: 1,
+          status: t.status || 'PENDING',
+          isInstallment: isInstallmentGroup || t.isInstallment,
+          installmentCurrent: undefined,
+        });
+        return;
+      }
+
+      const earliestDate =
+        !existing.date || new Date(existing.date) > new Date(t.date || existing.date) ? t.date || existing.date : existing.date;
+
+      groups.set(key, {
+        ...existing,
+        description: baseDescription,
+        amount: existing.amount + t.amount,
+        status: existing.status === 'PENDING' || (t.status || 'PENDING') === 'PENDING' ? 'PENDING' : 'PAID',
+        date: earliestDate,
+        aggregatedCount: (existing.aggregatedCount || 1) + 1,
+        isInstallment: isInstallmentGroup || existing.isInstallment,
+        installmentTotal: t.installmentTotal || existing.installmentTotal,
+        installmentCurrent: undefined,
+      });
+    });
+
+    return Array.from(groups.values());
+  }, [transactions]);
+
+  const listForFilters = referenceMonth === 'all' ? aggregatedAllTransactions : monthTransactions;
+
   const filteredTransactions = useMemo(() => {
     const search = searchTerm.toLowerCase();
-    return monthTransactions.filter((t) => {
+    return listForFilters.filter((t) => {
       const matchesSearch =
         t.description.toLowerCase().includes(search) ||
         t.category.toLowerCase().includes(search) ||
@@ -313,7 +356,7 @@ export const TransactionManager: React.FC<TransactionManagerProps> = ({
 
       return matchesSearch && matchesStatus;
     });
-  }, [monthTransactions, searchTerm, statusFilter]);
+  }, [listForFilters, searchTerm, statusFilter]);
 
   const monthCardMap = useMemo(() => Object.fromEntries(cards.map((c) => [c.id, c])), [cards]);
   const invoices = useMemo<CardInvoice[]>(() => {
@@ -350,38 +393,41 @@ export const TransactionManager: React.FC<TransactionManagerProps> = ({
     return Array.from(map.values()).sort((a, b) => a.dueDate.getTime() - b.dueDate.getTime());
   }, [transactions, monthCardMap]);
 
-  const monthInvoices = useMemo(() => invoices.filter((inv) => inv.monthKey === referenceMonth), [invoices, referenceMonth]);
+  const monthInvoices = useMemo(
+    () => (referenceMonth === 'all' ? invoices : invoices.filter((inv) => inv.monthKey === referenceMonth)),
+    [invoices, referenceMonth]
+  );
   const futureInvoices = useMemo(
-    () => invoices.filter((inv) => inv.monthKey > referenceMonth),
+    () => (referenceMonth === 'all' ? [] : invoices.filter((inv) => inv.monthKey > referenceMonth)),
     [invoices, referenceMonth]
   );
 
   const pendingTransactions = useMemo(
-    () => monthTransactions.filter((t) => (t.status || 'PENDING') === 'PENDING'),
-    [monthTransactions]
+    () => listForFilters.filter((t) => (t.status || 'PENDING') === 'PENDING'),
+    [listForFilters]
   );
 
   const monthIncomeReceived = useMemo(
-    () => monthTransactions.filter((t) => t.type === TransactionType.INCOME && t.status === 'PAID').reduce((acc, t) => acc + t.amount, 0),
-    [monthTransactions]
+    () => listForFilters.filter((t) => t.type === TransactionType.INCOME && t.status === 'PAID').reduce((acc, t) => acc + t.amount, 0),
+    [listForFilters]
   );
 
   const monthIncomePending = useMemo(
-    () => monthTransactions.filter((t) => t.type === TransactionType.INCOME && t.status === 'PENDING').reduce((acc, t) => acc + t.amount, 0),
-    [monthTransactions]
+    () => listForFilters.filter((t) => t.type === TransactionType.INCOME && t.status === 'PENDING').reduce((acc, t) => acc + t.amount, 0),
+    [listForFilters]
   );
 
   const monthExpensePaid = useMemo(
-    () => monthTransactions.filter((t) => t.type === TransactionType.EXPENSE && t.status === 'PAID').reduce((acc, t) => acc + t.amount, 0),
-    [monthTransactions]
+    () => listForFilters.filter((t) => t.type === TransactionType.EXPENSE && t.status === 'PAID').reduce((acc, t) => acc + t.amount, 0),
+    [listForFilters]
   );
 
   const monthExpensePending = useMemo(
-    () => monthTransactions.filter((t) => t.type === TransactionType.EXPENSE && t.status === 'PENDING').reduce((acc, t) => acc + t.amount, 0),
-    [monthTransactions]
+    () => listForFilters.filter((t) => t.type === TransactionType.EXPENSE && t.status === 'PENDING').reduce((acc, t) => acc + t.amount, 0),
+    [listForFilters]
   );
 
-  const nonCardTransactions = useMemo(() => monthTransactions.filter((t) => !t.cardId), [monthTransactions]);
+  const nonCardTransactions = useMemo(() => listForFilters.filter((t) => !t.cardId), [listForFilters]);
   const pendingNonCard = useMemo(
     () => nonCardTransactions.filter((t) => (t.status || 'PENDING') === 'PENDING'),
     [nonCardTransactions]
@@ -495,7 +541,9 @@ export const TransactionManager: React.FC<TransactionManagerProps> = ({
           <div>
             <p className="text-xs uppercase font-semibold text-slate-500">Visao mensal</p>
             <h3 className="text-xl font-bold text-slate-800">{referenceLabel}</h3>
-            <p className="text-xs text-slate-500">Mostrando somente transacoes e faturas deste mes.</p>
+            <p className="text-xs text-slate-500">
+              {referenceMonth === 'all' ? 'Resumo consolidado de todos os meses, sem repetir parcelas.' : 'Mostrando apenas transacoes e faturas deste mes.'}
+            </p>
           </div>
           <div className="flex items-center gap-2 flex-wrap">
             <button
@@ -526,6 +574,13 @@ export const TransactionManager: React.FC<TransactionManagerProps> = ({
               onChange={(e) => setReferenceMonth(e.target.value)}
             >
               {availableMonths.map((month) => {
+                if (month === 'all') {
+                  return (
+                    <option key={month} value={month}>
+                      Todos os meses
+                    </option>
+                  );
+                }
                 const d = parseMonthKey(month);
                 return (
                   <option key={month} value={month}>
