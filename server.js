@@ -372,8 +372,10 @@ async function refreshCdiRate(db, { force = false } = {}) {
 
   const current = meta.cdiRate || createDefaultMeta().cdiRate;
   const ageDays = getDaysBetween(current.updatedAt);
+  const isSeed = String(current.source || "").toLowerCase() === "seed";
+  const isStale = isSeed || ageDays >= CDI_MAX_AGE_DAYS;
 
-  if (!force && ageDays < CDI_MAX_AGE_DAYS) {
+  if (!force && !isStale) {
     return current;
   }
 
