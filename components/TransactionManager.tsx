@@ -93,7 +93,6 @@ interface CardInvoice {
   status: PaymentStatus;
   items: Transaction[];
 }
-
 interface TransactionManagerProps {
   transactions: Transaction[];
   cards: CreditCard[];
@@ -119,8 +118,7 @@ export const TransactionManager: React.FC<TransactionManagerProps> = ({
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'paid'>('all');
   const [showMonthSelector, setShowMonthSelector] = useState(false);
-  const [showFutureInvoices, setShowFutureInvoices] = useState(false);
-  const [expandedInvoices, setExpandedInvoices] = useState<Record<string, boolean>>({});
+  const [showImport, setShowImport] = useState(false);
 
   // Form State
   const [description, setDescription] = useState('');
@@ -377,50 +375,6 @@ export const TransactionManager: React.FC<TransactionManagerProps> = ({
     });
   }, [listForFilters, searchTerm, statusFilter]);
 
-  const monthCardMap = useMemo(() => Object.fromEntries(cards.map((c) => [c.id, c])), [cards]);
-  const invoices = useMemo<CardInvoice[]>(() => {
-    const map = new Map<string, CardInvoice>();
-    transactions
-      .filter((t) => t.cardId && t.type === TransactionType.EXPENSE)
-      .forEach((t) => {
-        const due = toDate(t.date);
-        if (!due) return;
-        const key = `${t.cardId}-${monthKey(due)}`;
-        const card = t.cardId ? monthCardMap[t.cardId] : null;
-
-        if (!map.has(key)) {
-          map.set(key, {
-            key,
-            cardId: t.cardId!,
-            cardName: card?.name || 'Cartao',
-            dueDate: due,
-            monthKey: monthKey(due),
-            total: 0,
-            status: 'PAID',
-            items: [],
-          });
-        }
-
-        const invoice = map.get(key)!;
-        invoice.items.push(t);
-        invoice.total += t.amount;
-        if ((t.status || 'PENDING') === 'PENDING') {
-          invoice.status = 'PENDING';
-        }
-      });
-
-    return Array.from(map.values()).sort((a, b) => a.dueDate.getTime() - b.dueDate.getTime());
-  }, [transactions, monthCardMap]);
-
-  const monthInvoices = useMemo(
-    () => (referenceMonth === 'all' ? invoices : invoices.filter((inv) => inv.monthKey === referenceMonth)),
-    [invoices, referenceMonth]
-  );
-  const futureInvoices = useMemo(
-    () => (referenceMonth === 'all' ? [] : invoices.filter((inv) => inv.monthKey > referenceMonth)),
-    [invoices, referenceMonth]
-  );
-
   const pendingTransactions = useMemo(
     () => listForFilters.filter((t) => (t.status || 'PENDING') === 'PENDING'),
     [listForFilters]
@@ -444,21 +398,6 @@ export const TransactionManager: React.FC<TransactionManagerProps> = ({
   const monthExpensePending = useMemo(
     () => listForFilters.filter((t) => t.type === TransactionType.EXPENSE && t.status === 'PENDING').reduce((acc, t) => acc + t.amount, 0),
     [listForFilters]
-  );
-
-  const nonCardTransactions = useMemo(() => listForFilters.filter((t) => !t.cardId), [listForFilters]);
-  const pendingNonCard = useMemo(
-    () => nonCardTransactions.filter((t) => (t.status || 'PENDING') === 'PENDING'),
-    [nonCardTransactions]
-  );
-  const paidNonCard = useMemo(
-    () => nonCardTransactions.filter((t) => (t.status || 'PENDING') === 'PAID'),
-    [nonCardTransactions]
-  );
-
-  const openInvoiceValue = useMemo(
-    () => monthInvoices.filter((inv) => inv.status === 'PENDING').reduce((sum, inv) => sum + inv.total, 0),
-    [monthInvoices]
   );
 
   const projectedBalance = monthIncomeReceived + monthIncomePending - (monthExpensePaid + monthExpensePending);
@@ -526,10 +465,6 @@ export const TransactionManager: React.FC<TransactionManagerProps> = ({
     setReferenceMonth(monthKey(next));
   };
 
-  const toggleInvoice = (key: string) => {
-    setExpandedInvoices((prev) => ({ ...prev, [key]: !prev[key] }));
-  };
-
   const selectedCard = selectedCardId ? cards.find((c) => c.id === selectedCardId) : null;
   const duePreview = selectedCard ? calculateCardDueDate(toDate(date) || new Date(), selectedCard).dueDate : null;
   const formatCurrency = (value: number) => value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -566,12 +501,6 @@ export const TransactionManager: React.FC<TransactionManagerProps> = ({
             </div>
             <div className="flex flex-col items-end gap-3 w-full lg:w-auto">
               <div className="flex flex-wrap justify-end gap-2">
-                <button
-                  onClick={() => document.getElementById('import-ai')?.scrollIntoView({ behavior: 'smooth' })}
-                  className="px-4 py-2 rounded-xl border border-white/30 bg-white/10 text-sm font-semibold hover:bg-white/20 backdrop-blur-sm transition-colors"
-                >
-                  Importar com IA
-                </button>
                 <button
                   onClick={exportCSV}
                   className="px-4 py-2 rounded-xl border border-white/30 bg-white/10 text-sm font-semibold hover:bg-white/20 backdrop-blur-sm transition-colors flex items-center gap-2"
@@ -642,21 +571,14 @@ export const TransactionManager: React.FC<TransactionManagerProps> = ({
             </div>
             <div className="p-4 rounded-2xl bg-white/10 border border-white/20 backdrop-blur-sm">
               <div className="flex items-center justify-between">
-                <p className="text-xs uppercase font-semibold text-indigo-100">Faturas do mes</p>
-                <span className="text-[11px] text-indigo-100/80">{formatCurrency(openInvoiceValue)} em aberto</span>
+                <p className="text-xs uppercase font-semibold text-indigo-100">Pendencias</p>
+                <span className="text-[11px] text-indigo-100/80">{pendingTransactions.length} itens</span>
               </div>
-              <p className="text-2xl font-bold mt-1">
-                {formatCurrency(monthInvoices.reduce((sum, inv) => sum + inv.total, 0))}
-              </p>
+              <p className="text-2xl font-bold mt-1">{formatCurrency(monthExpensePending)}</p>
               <div className="mt-3 h-2 bg-white/10 rounded-full overflow-hidden">
                 <div
                   className="h-full bg-amber-300"
-                  style={{
-                    width: `${percentage(
-                      monthInvoices.reduce((sum, inv) => sum + (inv.status === 'PAID' ? inv.total : 0), 0),
-                      monthInvoices.reduce((sum, inv) => sum + inv.total, 0)
-                    )}%`,
-                  }}
+                  style={{ width: `${percentage(monthExpensePending, monthExpensePaid + monthExpensePending)}%` }}
                 ></div>
               </div>
             </div>
@@ -710,242 +632,17 @@ export const TransactionManager: React.FC<TransactionManagerProps> = ({
         </div>
       </div>
 
-      <div className="bg-white/90 backdrop-blur-sm p-6 rounded-3xl shadow-xl border border-slate-200">
-        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-5">
-          <div>
-            <h3 className="text-lg font-bold text-slate-900">Painel detalhado</h3>
-            <p className="text-sm text-slate-500">Comparativo do periodo selecionado, com foco em pendencias e faturas.</p>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <span className="px-3 py-1 rounded-full text-xs font-semibold bg-slate-100 border border-slate-200 text-slate-700">
-              {filteredTransactions.length} registros
-            </span>
-            <span className="px-3 py-1 rounded-full text-xs font-semibold bg-amber-100 border border-amber-200 text-amber-700">
-              {pendingTransactions.length} pendencias
-            </span>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          <div className="p-4 rounded-2xl border border-emerald-100 bg-gradient-to-br from-emerald-50 to-white shadow-sm">
-            <p className="text-xs font-semibold text-emerald-700 uppercase">Receitas</p>
-            <p className="text-2xl font-bold text-emerald-900 mt-1">{formatCurrency(monthIncomeReceived)}</p>
-            <p className="text-xs text-emerald-700/80">A receber: {formatCurrency(monthIncomePending)}</p>
-            <div className="mt-3 h-1.5 bg-emerald-100 rounded-full overflow-hidden">
-              <div
-                className="h-full bg-emerald-500"
-                style={{ width: `${percentage(monthIncomeReceived, monthIncomeReceived + monthIncomePending)}%` }}
-              ></div>
-            </div>
-          </div>
-          <div className="p-4 rounded-2xl border border-rose-100 bg-gradient-to-br from-rose-50 to-white shadow-sm">
-            <p className="text-xs font-semibold text-rose-700 uppercase">Despesas</p>
-            <p className="text-2xl font-bold text-rose-900 mt-1">{formatCurrency(monthExpensePaid)}</p>
-            <p className="text-xs text-rose-700/80">Pendentes: {formatCurrency(monthExpensePending)}</p>
-            <div className="mt-3 h-1.5 bg-rose-100 rounded-full overflow-hidden">
-              <div
-                className="h-full bg-rose-500"
-                style={{ width: `${percentage(monthExpensePaid, monthExpensePaid + monthExpensePending)}%` }}
-              ></div>
-            </div>
-          </div>
-          <div className="p-4 rounded-2xl border border-amber-100 bg-gradient-to-br from-amber-50 to-white shadow-sm">
-            <p className="text-xs font-semibold text-amber-700 uppercase">Faturas do mes</p>
-            <p className="text-2xl font-bold text-amber-900 mt-1">
-              {formatCurrency(monthInvoices.reduce((sum, inv) => sum + inv.total, 0))}
-            </p>
-            <p className="text-xs text-amber-700/80">Em aberto: {formatCurrency(openInvoiceValue)}</p>
-            <div className="mt-3 h-1.5 bg-amber-100 rounded-full overflow-hidden">
-              <div
-                className="h-full bg-amber-500"
-                style={{
-                  width: `${percentage(
-                    monthInvoices.reduce((sum, inv) => sum + (inv.status === 'PAID' ? inv.total : 0), 0),
-                    monthInvoices.reduce((sum, inv) => sum + inv.total, 0)
-                  )}%`,
-                }}
-              ></div>
-            </div>
-          </div>
-          <div className="p-4 rounded-2xl border border-indigo-100 bg-gradient-to-br from-indigo-50 via-white to-white shadow-sm">
-            <p className="text-xs font-semibold text-indigo-700 uppercase">Caixa</p>
-            <p className="text-2xl font-bold text-indigo-900 mt-1">{formatCurrency(projectedBalance)}</p>
-            <p className="text-xs text-indigo-700/80">Realizado: {formatCurrency(realizedBalance)}</p>
-            <div className="mt-3 h-1.5 bg-indigo-100 rounded-full overflow-hidden">
-              <div
-                className="h-full bg-indigo-500"
-                style={{
-                  width: `${percentage(realizedBalance, projectedBalance === 0 ? 1 : projectedBalance)}%`,
-                }}
-              ></div>
-            </div>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mt-6">
-          <div className="p-4 rounded-2xl border border-slate-200 bg-gradient-to-br from-slate-50 to-white shadow-sm">
-            <div className="flex items-center justify-between mb-3">
-              <div>
-                <p className="text-xs uppercase font-semibold text-slate-500">Pagos vs pendentes</p>
-                <h4 className="text-sm font-bold text-slate-800">Transacoes do mes (sem cartao)</h4>
-              </div>
-              <span className="text-xs px-3 py-1 rounded-full bg-slate-100 text-slate-700 border border-slate-200">
-                {nonCardTransactions.length} itens
-              </span>
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              <div className="bg-white border border-emerald-100 rounded-xl p-3 shadow-sm">
-                <p className="text-[11px] font-semibold text-emerald-700 uppercase">Pagos</p>
-                {paidNonCard.slice(0, 4).map((t) => (
-                  <div key={t.id} className="mt-2 p-2 rounded-lg bg-emerald-50 border border-emerald-100">
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm font-semibold text-slate-800 truncate">{t.description}</span>
-                      <span className="text-xs text-emerald-700">{formatCurrency(t.amount)}</span>
-                    </div>
-                    <p className="text-[11px] text-slate-500">
-                      {new Date(t.date).toLocaleDateString('pt-BR')} - {t.category}
-                    </p>
-                  </div>
-                ))}
-                {paidNonCard.length === 0 && <p className="text-xs text-slate-500 mt-2">Nenhum pago ainda.</p>}
-              </div>
-              <div className="bg-white border border-amber-100 rounded-xl p-3 shadow-sm">
-                <p className="text-[11px] font-semibold text-amber-700 uppercase">Pendentes</p>
-                {pendingNonCard.slice(0, 4).map((t) => (
-                  <div key={t.id} className="mt-2 p-2 rounded-lg bg-amber-50 border border-amber-100">
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm font-semibold text-slate-800 truncate">{t.description}</span>
-                      <span className="text-xs text-amber-700">{formatCurrency(t.amount)}</span>
-                    </div>
-                    <p className="text-[11px] text-slate-500">
-                      {new Date(t.date).toLocaleDateString('pt-BR')} - {t.category}
-                    </p>
-                    <button
-                      onClick={() => updateStatus([t.id], 'PAID')}
-                      className="text-[11px] text-emerald-700 hover:underline mt-1"
-                    >
-                      Marcar como pago
-                    </button>
-                  </div>
-                ))}
-                {pendingNonCard.length === 0 && <p className="text-xs text-slate-500 mt-2">Sem pendencias manuais.</p>}
-              </div>
-            </div>
-          </div>
-          <div className="p-4 rounded-2xl border border-indigo-100 bg-gradient-to-br from-indigo-50 via-white to-white shadow-sm">
-            <div className="flex items-center justify-between mb-3">
-              <div>
-                <p className="text-xs uppercase font-semibold text-slate-500">Faturas do mes</p>
-                <h4 className="text-sm font-bold text-slate-800">Cartao, vencimento e status</h4>
-              </div>
-              <span className="text-xs px-3 py-1 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-100">
-                {monthInvoices.length} faturas
-              </span>
-            </div>
-            {monthInvoices.length === 0 ? (
-              <p className="text-sm text-slate-500">Nenhuma fatura com vencimento neste mes.</p>
-            ) : (
-              <div className="space-y-3">
-                {monthInvoices.map((inv) => (
-                  <div key={inv.key} className="p-3 rounded-xl border border-indigo-100 bg-white shadow-sm">
-                    <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <p className="text-sm font-semibold text-slate-800">{inv.cardName}</p>
-                        <p className="text-xs text-slate-500">Vence em {inv.dueDate.toLocaleDateString('pt-BR')}</p>
-                        <p className="text-xs text-slate-500">{inv.items.length} compras</p>
-                      </div>
-                      <div className="text-right">
-                        <p className="text-base font-bold text-slate-800">{formatCurrency(inv.total)}</p>
-                        <span
-                          className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-[11px] font-semibold ${
-                            inv.status === 'PAID'
-                              ? 'bg-emerald-100 text-emerald-700 border border-emerald-200'
-                              : 'bg-amber-100 text-amber-700 border border-amber-200'
-                          }`}
-                        >
-                          {inv.status === 'PAID' ? <CheckCircle2 size={12} /> : <Clock3 size={12} />}
-                          {inv.status === 'PAID' ? 'Paga' : 'Em aberto'}
-                        </span>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2 mt-2">
-                      {inv.status === 'PENDING' && (
-                        <button
-                          onClick={() => updateStatus(inv.items.map((i) => i.id), 'PAID')}
-                          className="px-3 py-1 rounded-lg bg-emerald-600 text-white text-xs font-semibold hover:bg-emerald-700 transition-colors"
-                        >
-                          Marcar fatura como paga
-                        </button>
-                      )}
-                      <button
-                        onClick={() => toggleInvoice(inv.key)}
-                        className="text-xs text-indigo-700 flex items-center gap-1"
-                      >
-                        <ChevronDown
-                          size={12}
-                          className={`${expandedInvoices[inv.key] ? 'rotate-180' : ''} transition-transform`}
-                        />
-                        {expandedInvoices[inv.key] ? 'Fechar compras' : 'Ver compras'}
-                      </button>
-                    </div>
-                    {expandedInvoices[inv.key] && (
-                      <div className="mt-2 space-y-1">
-                        {inv.items.map((item) => (
-                          <div
-                            key={item.id}
-                            className="flex items-center justify-between text-xs bg-indigo-50/60 p-2 rounded-lg border border-indigo-100"
-                          >
-                            <div className="flex items-center gap-2">
-                              <CardIcon size={12} className="text-indigo-500" />
-                              <span className="font-semibold text-slate-800">{item.description}</span>
-                            </div>
-                            <div className="text-right">
-                              <p className="font-bold text-slate-800">{formatCurrency(item.amount)}</p>
-                              <p className="text-[10px] text-slate-500">
-                                {new Date(item.date).toLocaleDateString('pt-BR')}
-                                {item.purchaseDate ? ` - compra ${new Date(item.purchaseDate).toLocaleDateString('pt-BR')}` : ''}
-                              </p>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
-            )}
-            <div className="mt-4 pt-3 border-t border-slate-100">
-              <button
-                onClick={() => setShowFutureInvoices((v) => !v)}
-                className="text-xs text-indigo-700 flex items-center gap-2"
-              >
-                <ChevronDown size={12} className={`${showFutureInvoices ? 'rotate-180' : ''} transition-transform`} />
-                Mostrar proximas faturas
-              </button>
-              {showFutureInvoices && (
-                <div className="mt-3 space-y-2">
-                  {futureInvoices.length === 0 && <p className="text-xs text-slate-500">Nenhuma fatura futura cadastrada.</p>}
-                  {futureInvoices.map((inv) => (
-                    <div
-                      key={inv.key}
-                      className="flex items-center justify-between p-2 rounded-lg bg-indigo-50/60 border border-indigo-100"
-                    >
-                      <div>
-                        <p className="text-sm font-semibold text-slate-800">{inv.cardName}</p>
-                        <p className="text-[11px] text-slate-500">
-                          {inv.dueDate.toLocaleDateString('pt-BR')} - {inv.items.length} compras
-                        </p>
-                      </div>
-                      <p className="text-sm font-bold text-slate-800">{formatCurrency(inv.total)}</p>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
+      <div className="flex justify-end">
+        <button
+          onClick={() => setShowImport((v) => !v)}
+          className="inline-flex items-center gap-2 text-xs font-semibold px-3 py-2 rounded-full border border-slate-200 bg-white shadow-sm hover:border-indigo-200"
+        >
+          <Wand2 size={14} className="text-indigo-600" />
+          {showImport ? 'Ocultar importacao IA' : 'Importar com IA'}
+        </button>
       </div>
 
+      {showImport && (
       <div id="import-ai" className="bg-white/95 backdrop-blur-sm p-5 rounded-3xl shadow-lg border border-slate-200 space-y-3">
         <div className="flex items-start gap-3">
           <div className="p-2 rounded-lg bg-slate-900 text-white">
@@ -994,6 +691,7 @@ export const TransactionManager: React.FC<TransactionManagerProps> = ({
           </div>
         </div>
       </div>
+      )}
       {/* Filters */}
       <div className="rounded-3xl border border-slate-200 bg-white/90 backdrop-blur-sm shadow-lg p-4 md:p-5">
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">

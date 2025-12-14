@@ -8,6 +8,82 @@ interface ReportsProps {
 }
 
 export const Reports: React.FC<ReportsProps> = ({ transactions }) => {
+  const formatCurrency = (value: number) => value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+  const percentage = (part: number, total: number) => {
+    if (total <= 0) return 0;
+    return Math.min(100, Math.round((part / total) * 100));
+  };
+  const monthKey = (date: Date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+  const parseMonthKey = (key: string) => {
+    const [year, month] = key.split('-').map(Number);
+    return new Date(year, (month || 1) - 1, 1);
+  };
+  const today = React.useMemo(() => new Date(), []);
+  const [selectedMonth, setSelectedMonth] = React.useState<string>(monthKey(today));
+
+  const availableMonths = React.useMemo(() => {
+    const keys = new Set<string>(['all', monthKey(today)]);
+    transactions.forEach((t) => {
+      const d = new Date(t.date);
+      if (!Number.isNaN(d.getTime())) keys.add(monthKey(d));
+    });
+    return Array.from(keys).sort((a, b) => {
+      if (a === 'all') return -1;
+      if (b === 'all') return 1;
+      return b.localeCompare(a);
+    });
+  }, [transactions, today]);
+
+  const referenceDate = selectedMonth === 'all' ? today : parseMonthKey(selectedMonth);
+  const referenceLabel =
+    selectedMonth === 'all'
+      ? 'Todos os meses'
+      : referenceDate.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
+
+  const monthTransactions = React.useMemo(
+    () =>
+      selectedMonth === 'all'
+        ? [...transactions]
+        : transactions.filter((t) => {
+            const d = new Date(t.date);
+            if (Number.isNaN(d.getTime())) return false;
+            return monthKey(d) === selectedMonth;
+          }),
+    [selectedMonth, transactions]
+  );
+
+  const monthIncomeReceived = React.useMemo(
+    () => monthTransactions.filter((t) => t.type === TransactionType.INCOME && t.status === 'PAID').reduce((acc, t) => acc + t.amount, 0),
+    [monthTransactions]
+  );
+  const monthIncomePending = React.useMemo(
+    () => monthTransactions.filter((t) => t.type === TransactionType.INCOME && t.status === 'PENDING').reduce((acc, t) => acc + t.amount, 0),
+    [monthTransactions]
+  );
+  const monthExpensePaid = React.useMemo(
+    () => monthTransactions.filter((t) => t.type === TransactionType.EXPENSE && t.status === 'PAID').reduce((acc, t) => acc + t.amount, 0),
+    [monthTransactions]
+  );
+  const monthExpensePending = React.useMemo(
+    () => monthTransactions.filter((t) => t.type === TransactionType.EXPENSE && t.status === 'PENDING').reduce((acc, t) => acc + t.amount, 0),
+    [monthTransactions]
+  );
+  const projectedBalance = monthIncomeReceived + monthIncomePending - (monthExpensePaid + monthExpensePending);
+  const realizedBalance = monthIncomeReceived - monthExpensePaid;
+  const pendingTransactions = React.useMemo(
+    () => monthTransactions.filter((t) => (t.status || 'PENDING') === 'PENDING'),
+    [monthTransactions]
+  );
+  const nonCardTransactions = React.useMemo(() => monthTransactions.filter((t) => !t.cardId), [monthTransactions]);
+  const paidNonCard = React.useMemo(
+    () => nonCardTransactions.filter((t) => (t.status || 'PENDING') === 'PAID'),
+    [nonCardTransactions]
+  );
+  const pendingNonCard = React.useMemo(
+    () => nonCardTransactions.filter((t) => (t.status || 'PENDING') === 'PENDING'),
+    [nonCardTransactions]
+  );
+
   // 1. Monthly Data
   const monthlyData = React.useMemo(() => {
     const data: Record<string, { name: string; income: number; expense: number; balance: number }> = {};
@@ -65,6 +141,168 @@ export const Reports: React.FC<ReportsProps> = ({ transactions }) => {
               <Download size={20} />
               <span className="hidden sm:inline">Exportar PDF</span>
            </button>
+        </div>
+      </div>
+
+      <div className="bg-white/90 backdrop-blur-sm p-5 rounded-3xl shadow-lg border border-slate-200 space-y-5">
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+          <div>
+            <p className="text-xs uppercase font-semibold text-slate-500">Painel detalhado</p>
+            <h3 className="text-lg font-bold text-slate-900">{referenceLabel}</h3>
+            <p className="text-sm text-slate-500">Receitas, despesas, pendencias e caixa do periodo selecionado.</p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <select
+              className="px-3 py-2 border border-slate-200 rounded-xl bg-white text-sm shadow-sm min-w-[200px]"
+              value={selectedMonth}
+              onChange={(e) => setSelectedMonth(e.target.value)}
+            >
+              {availableMonths.map((month) => {
+                if (month === 'all') {
+                  return (
+                    <option key={month} value={month}>
+                      Todos os meses
+                    </option>
+                  );
+                }
+                const d = parseMonthKey(month);
+                return (
+                  <option key={month} value={month}>
+                    {d.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })}
+                  </option>
+                );
+              })}
+            </select>
+            <span className="px-3 py-1 rounded-full text-xs font-semibold bg-slate-100 border border-slate-200 text-slate-700">
+              {pendingTransactions.length} pendencias
+            </span>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="p-4 rounded-2xl border border-emerald-100 bg-gradient-to-br from-emerald-50 to-white shadow-sm">
+            <p className="text-xs font-semibold text-emerald-700 uppercase">Receitas</p>
+            <p className="text-2xl font-bold text-emerald-900 mt-1">{formatCurrency(monthIncomeReceived)}</p>
+            <p className="text-xs text-emerald-700/80">A receber: {formatCurrency(monthIncomePending)}</p>
+            <div className="mt-3 h-1.5 bg-emerald-100 rounded-full overflow-hidden">
+              <div
+                className="h-full bg-emerald-500"
+                style={{ width: `${percentage(monthIncomeReceived, monthIncomeReceived + monthIncomePending)}%` }}
+              ></div>
+            </div>
+          </div>
+          <div className="p-4 rounded-2xl border border-rose-100 bg-gradient-to-br from-rose-50 to-white shadow-sm">
+            <p className="text-xs font-semibold text-rose-700 uppercase">Despesas</p>
+            <p className="text-2xl font-bold text-rose-900 mt-1">{formatCurrency(monthExpensePaid)}</p>
+            <p className="text-xs text-rose-700/80">Pendentes: {formatCurrency(monthExpensePending)}</p>
+            <div className="mt-3 h-1.5 bg-rose-100 rounded-full overflow-hidden">
+              <div
+                className="h-full bg-rose-500"
+                style={{ width: `${percentage(monthExpensePaid, monthExpensePaid + monthExpensePending)}%` }}
+              ></div>
+            </div>
+          </div>
+          <div className="p-4 rounded-2xl border border-amber-100 bg-gradient-to-br from-amber-50 to-white shadow-sm">
+            <p className="text-xs font-semibold text-amber-700 uppercase">Pendencias</p>
+            <p className="text-2xl font-bold text-amber-900 mt-1">{formatCurrency(monthExpensePending)}</p>
+            <p className="text-xs text-amber-700/80">{pendingTransactions.length} itens</p>
+            <div className="mt-3 h-1.5 bg-amber-100 rounded-full overflow-hidden">
+              <div
+                className="h-full bg-amber-500"
+                style={{ width: `${percentage(monthExpensePending, monthExpensePending + monthExpensePaid)}%` }}
+              ></div>
+            </div>
+          </div>
+          <div className="p-4 rounded-2xl border border-indigo-100 bg-gradient-to-br from-indigo-50 via-white to-white shadow-sm">
+            <p className="text-xs font-semibold text-indigo-700 uppercase">Caixa</p>
+            <p className="text-2xl font-bold text-indigo-900 mt-1">{formatCurrency(projectedBalance)}</p>
+            <p className="text-xs text-indigo-700/80">Realizado: {formatCurrency(realizedBalance)}</p>
+            <div className="mt-3 h-1.5 bg-indigo-100 rounded-full overflow-hidden">
+              <div
+                className="h-full bg-indigo-500"
+                style={{ width: `${percentage(realizedBalance, projectedBalance === 0 ? 1 : projectedBalance)}%` }}
+              ></div>
+            </div>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <div className="p-4 rounded-2xl border border-slate-200 bg-gradient-to-br from-slate-50 to-white shadow-sm">
+            <div className="flex items-center justify-between mb-3">
+              <div>
+                <p className="text-xs uppercase font-semibold text-slate-500">Pagos vs pendentes</p>
+                <h4 className="text-sm font-bold text-slate-800">Transacoes (sem cartao)</h4>
+              </div>
+              <span className="text-xs px-3 py-1 rounded-full bg-slate-100 text-slate-700 border border-slate-200">
+                {nonCardTransactions.length} itens
+              </span>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div className="bg-white border border-emerald-100 rounded-xl p-3 shadow-sm">
+                <p className="text-[11px] font-semibold text-emerald-700 uppercase">Pagos</p>
+                {paidNonCard.slice(0, 4).map((t) => (
+                  <div key={t.id} className="mt-2 p-2 rounded-lg bg-emerald-50 border border-emerald-100">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-semibold text-slate-800 truncate">{t.description}</span>
+                      <span className="text-xs text-emerald-700">{formatCurrency(t.amount)}</span>
+                    </div>
+                    <p className="text-[11px] text-slate-500">
+                      {new Date(t.date).toLocaleDateString('pt-BR')} - {t.category}
+                    </p>
+                  </div>
+                ))}
+                {paidNonCard.length === 0 && <p className="text-xs text-slate-500 mt-2">Nenhum pago ainda.</p>}
+              </div>
+              <div className="bg-white border border-amber-100 rounded-xl p-3 shadow-sm">
+                <p className="text-[11px] font-semibold text-amber-700 uppercase">Pendentes</p>
+                {pendingNonCard.slice(0, 4).map((t) => (
+                  <div key={t.id} className="mt-2 p-2 rounded-lg bg-amber-50 border border-amber-100">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-semibold text-slate-800 truncate">{t.description}</span>
+                      <span className="text-xs text-amber-700">{formatCurrency(t.amount)}</span>
+                    </div>
+                    <p className="text-[11px] text-slate-500">
+                      {new Date(t.date).toLocaleDateString('pt-BR')} - {t.category}
+                    </p>
+                  </div>
+                ))}
+                {pendingNonCard.length === 0 && <p className="text-xs text-slate-500 mt-2">Sem pendencias manuais.</p>}
+              </div>
+            </div>
+          </div>
+          <div className="p-4 rounded-2xl border border-indigo-100 bg-gradient-to-br from-indigo-50 via-white to-white shadow-sm">
+            <div className="flex items-center justify-between mb-3">
+              <div>
+                <p className="text-xs uppercase font-semibold text-slate-500">Resumo rapido</p>
+                <h4 className="text-sm font-bold text-slate-800">Saldo e previsao</h4>
+              </div>
+              <span className="text-xs px-3 py-1 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-100">
+                {monthTransactions.length} registros
+              </span>
+            </div>
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-slate-600">Saldo realizado</span>
+                <span className="text-sm font-bold text-slate-800">{formatCurrency(realizedBalance)}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-slate-600">Saldo projetado</span>
+                <span className="text-sm font-bold text-slate-800">{formatCurrency(projectedBalance)}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-slate-600">Pendencias</span>
+                <span className="text-sm font-bold text-amber-700">
+                  {formatCurrency(monthExpensePending + monthIncomePending)}
+                </span>
+              </div>
+              <div className="h-2 bg-indigo-100 rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-indigo-500"
+                  style={{ width: `${percentage(realizedBalance, projectedBalance === 0 ? 1 : projectedBalance)}%` }}
+                ></div>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
 
