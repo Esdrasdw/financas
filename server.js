@@ -18,6 +18,9 @@ const DEFAULT_DATA_DIR = path.join(__dirname, "data");
 // Em Railway, padrao para o volume montado em /data (pode ser sobrescrito via DATA_DIR)
 const DATA_DIR = process.env.DATA_DIR || (IS_RAILWAY ? "/data" : DEFAULT_DATA_DIR);
 const DATA_FILE = path.join(DATA_DIR, "db.json");
+const DATA_TMP_FILE = `${DATA_FILE}.tmp`;
+const DATA_BACKUP_FILE = `${DATA_FILE}.bak`;
+let pendingSave = Promise.resolve();
 const PORT = Number(process.env.PORT) || 4000;
 const IS_PRODUCTION = process.env.NODE_ENV === "production" || IS_RAILWAY;
 const JWT_SECRET = process.env.JWT_SECRET || (IS_PRODUCTION ? "" : "change-me-now");
@@ -143,6 +146,8 @@ app.use(cors(corsOrigin?.length ? { origin: corsOrigin } : { origin: true }));
 app.use(express.json({ limit: "10mb" }));
 
 async function loadDB() {
+  // Aguarda gravacoes anteriores terminarem para evitar leituras de arquivo parcialmente escrito
+  await pendingSave;
   await fs.mkdir(DATA_DIR, { recursive: true });
   let db;
   try {
@@ -152,9 +157,14 @@ async function loadDB() {
     if (error.code === "ENOENT") {
       db = createSeed();
     } else {
-      console.error("DB corrompido, recriando seed:", error.message || error);
-      db = createSeed();
-      await saveDB(db);
+      console.error("DB corrompido, tentando restaurar backup:", error.message || error);
+      const restored = await tryRestoreBackup();
+      if (restored) {
+        db = restored;
+      } else {
+        console.error("Backup indisponivel, recriando seed:", error.message || error);
+        db = createSeed();
+      }
     }
   }
 
@@ -164,8 +174,49 @@ async function loadDB() {
 }
 
 async function saveDB(db) {
+  const payload = JSON.stringify(db, null, 2);
+  // Serializa gravacoes para evitar corrupcao por escrita concorrente
+  pendingSave = pendingSave
+    .catch(() => null)
+    .then(() => writeDbAtomic(payload))
+    .catch((error) => {
+      console.error("Falha ao salvar DB:", error.message || error);
+    });
+  return pendingSave;
+}
+
+async function writeDbAtomic(content) {
   await fs.mkdir(DATA_DIR, { recursive: true });
-  await fs.writeFile(DATA_FILE, JSON.stringify(db, null, 2));
+
+  if (existsSync(DATA_FILE)) {
+    try {
+      await fs.copyFile(DATA_FILE, DATA_BACKUP_FILE);
+    } catch (error) {
+      console.error("Nao foi possivel salvar backup do DB:", error.message || error);
+    }
+  }
+
+  await fs.writeFile(DATA_TMP_FILE, content, "utf-8");
+
+  try {
+    await fs.rm(DATA_FILE, { force: true });
+    await fs.rename(DATA_TMP_FILE, DATA_FILE);
+  } catch (error) {
+    console.error("Falha ao trocar arquivo do DB de forma atomica, tentando escrita direta:", error.message || error);
+    await fs.writeFile(DATA_FILE, content, "utf-8");
+    await fs.rm(DATA_TMP_FILE, { force: true });
+  }
+}
+
+async function tryRestoreBackup() {
+  if (!existsSync(DATA_BACKUP_FILE)) return null;
+  try {
+    const raw = await fs.readFile(DATA_BACKUP_FILE, "utf-8");
+    return JSON.parse(raw);
+  } catch (error) {
+    console.error("Falha ao ler backup do DB:", error.message || error);
+    return null;
+  }
 }
 
 function createSeed() {
