@@ -4,10 +4,8 @@ import {
   TransactionType,
   FinancialSummary,
   ViewState,
-  AIInsight,
   CreditCard as CreditCardType,
   Investment,
-  AIPreferences,
   Budget,
   User,
   FinanceDataset,
@@ -25,9 +23,8 @@ import { Budgets } from "./components/Budgets";
 import { FinancialTools } from "./components/FinancialTools";
 import { Reports } from "./components/Reports";
 import { Login } from "./components/Login";
-import { analyzeFinances } from "./services/openaiService";
 import { api } from "./services/api";
-import { Menu, Lightbulb, X, Bell, LogOut } from "lucide-react";
+import { Menu, X, Bell, LogOut } from "lucide-react";
 
 const EMPTY_DATA: FinanceDataset = { transactions: [], cards: [], investments: [], budgets: [], goals: [] };
 
@@ -52,16 +49,8 @@ const App: React.FC = () => {
   });
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
-  const [dailyInsight, setDailyInsight] = useState<AIInsight | null>(null);
   const [checkingSession, setCheckingSession] = useState(true);
   const [globalError, setGlobalError] = useState<string | null>(null);
-
-  // Default AI Preferences
-  const [aiPreferences] = useState<AIPreferences>({
-    shareBalance: true,
-    shareTransactions: true,
-    shareInvestments: true,
-  });
 
   const buildId = () => Math.random().toString(36).slice(2, 11);
 
@@ -122,16 +111,6 @@ const App: React.FC = () => {
     bootstrap();
   }, []);
 
-  // Fetch AI Insight
-  useEffect(() => {
-    if (!isAuthenticated) return;
-    const fetchInsight = async () => {
-      const insight = await analyzeFinances(transactions, investments, aiPreferences);
-      setDailyInsight(insight);
-    };
-    fetchInsight();
-  }, [transactions.length, investments.length, isAuthenticated]);
-
   const handleLogin = (session: { user: User; token: string; data: FinanceDataset }) => {
     api.setToken(session.token);
     setUser(session.user);
@@ -145,7 +124,6 @@ const App: React.FC = () => {
     setIsAuthenticated(false);
     setUser(null);
     hydrateData(EMPTY_DATA);
-    setDailyInsight(null);
   };
 
   const addTransactions = async (newTxs: Omit<Transaction, "id">[]) => {
@@ -458,27 +436,6 @@ const App: React.FC = () => {
         {globalError && (
           <div className="mb-4 bg-amber-50 border border-amber-200 text-amber-800 px-4 py-3 rounded-xl">
             {globalError}
-          </div>
-        )}
-
-        {/* AI Banner (Dashboard Only) */}
-        {currentView === "dashboard" && dailyInsight && (
-          <div
-            className={`mb-8 p-4 rounded-xl border flex gap-4 items-start animate-fade-in ${
-              dailyInsight.type === "success"
-                ? "bg-emerald-50 border-emerald-100 text-emerald-800"
-                : dailyInsight.type === "warning"
-                ? "bg-amber-50 border-amber-100 text-amber-800"
-                : "bg-indigo-50 border-indigo-100 text-indigo-800"
-            }`}
-          >
-            <div className={`p-2 rounded-lg shrink-0 bg-white/50`}>
-              <Lightbulb size={20} />
-            </div>
-            <div>
-              <h4 className="font-bold text-sm mb-1">Dica do Assistente: {dailyInsight.title}</h4>
-              <p className="text-sm opacity-90">{dailyInsight.message}</p>
-            </div>
           </div>
         )}
 
