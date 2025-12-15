@@ -141,6 +141,7 @@ export const TransactionManager: React.FC<TransactionManagerProps> = ({
   const [isImporting, setIsImporting] = useState(false);
   const [importFeedback, setImportFeedback] = useState<string | null>(null);
   const [recurrenceMonths, setRecurrenceMonths] = useState(12);
+  const [installmentValueMode, setInstallmentValueMode] = useState<'total' | 'perInstallment'>('total');
 
   const paymentLabels: Record<PaymentMethod, string> = { PIX: 'PIX', CASH: 'Dinheiro', CARD: 'Cartao' };
   const statusLabels: Record<PaymentStatus, { label: string; color: string }> = {
@@ -173,10 +174,11 @@ export const TransactionManager: React.FC<TransactionManagerProps> = ({
     const purchaseDate = toDate(date) || new Date();
     const card = selectedCardId ? cards.find((c) => c.id === selectedCardId) : null;
     const { dueDate } = card ? calculateCardDueDate(purchaseDate, card) : { dueDate: purchaseDate };
+    const rawAmount = Number(amount) || 0;
 
     const baseTransaction = {
       description,
-      amount: Number(amount),
+      amount: rawAmount,
       category,
       type,
       cardId: selectedCardId || undefined,
@@ -205,22 +207,25 @@ export const TransactionManager: React.FC<TransactionManagerProps> = ({
         });
       }
     } else if (isInstallment && type === TransactionType.EXPENSE) {
-      const installmentAmount = baseTransaction.amount / totalInstallments;
-      const remainingInstallments = totalInstallments - paidInstallments;
+      const safeTotalInstallments = Math.max(1, totalInstallments || 1);
+      const normalizedPaid = Math.min(Math.max(0, paidInstallments || 0), safeTotalInstallments - 1);
+      const perInstallmentAmount =
+        installmentValueMode === 'perInstallment' ? rawAmount : rawAmount / safeTotalInstallments;
+      const remainingInstallments = Math.max(0, safeTotalInstallments - normalizedPaid);
       const startingDate = card ? dueDate : purchaseDate;
 
       for (let i = 0; i < remainingInstallments; i++) {
-        const currentNumber = paidInstallments + i + 1;
+        const currentNumber = normalizedPaid + i + 1;
         const txDate = addMonths(startingDate, i);
 
         newTransactions.push({
           ...baseTransaction,
-          description: `${description} (${currentNumber}/${totalInstallments})`,
-          amount: installmentAmount,
+          description: `${description} (${currentNumber}/${safeTotalInstallments})`,
+          amount: perInstallmentAmount,
           date: txDate.toISOString().split('T')[0],
           isInstallment: true,
           installmentCurrent: currentNumber,
-          installmentTotal: totalInstallments,
+          installmentTotal: safeTotalInstallments,
           status: card ? 'PENDING' : baseTransaction.status,
         });
       }
@@ -251,6 +256,7 @@ export const TransactionManager: React.FC<TransactionManagerProps> = ({
     setPaymentMethod('PIX');
     setStatus('PAID');
     setRecurrenceMonths(12);
+    setInstallmentValueMode('total');
   };
 
   const exportCSV = () => {
@@ -948,6 +954,7 @@ export const TransactionManager: React.FC<TransactionManagerProps> = ({
                     setIsInstallment(false);
                     setSelectedCardId('');
                     setPaymentMethod('PIX');
+                    setInstallmentValueMode('total');
                   }}
                   className={`flex-1 py-2 rounded-lg text-sm font-bold transition-all ${
                     type === TransactionType.INCOME ? 'bg-white text-emerald-600 shadow-sm' : 'text-slate-500'
@@ -971,7 +978,13 @@ export const TransactionManager: React.FC<TransactionManagerProps> = ({
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">Valor Total</label>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">
+                    {isInstallment
+                      ? installmentValueMode === 'perInstallment'
+                        ? 'Valor de cada parcela'
+                        : 'Valor total da compra'
+                      : 'Valor'}
+                  </label>
                   <input
                     required
                     type="number"
@@ -979,7 +992,11 @@ export const TransactionManager: React.FC<TransactionManagerProps> = ({
                     className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
                     value={amount}
                     onChange={(e) => setAmount(e.target.value)}
-                    placeholder="0.00"
+                    placeholder={
+                      isInstallment && installmentValueMode === 'perInstallment'
+                        ? 'Valor da parcela (ex: 200)'
+                        : '0.00'
+                    }
                   />
                 </div>
                 <div>
@@ -1089,6 +1106,7 @@ export const TransactionManager: React.FC<TransactionManagerProps> = ({
                               setRecurrenceMonths(12);
                             }
                             setIsInstallment(false);
+                            setInstallmentValueMode('total');
                           }}
                         />
                         <Repeat size={16} className="text-slate-600" />
@@ -1123,8 +1141,12 @@ export const TransactionManager: React.FC<TransactionManagerProps> = ({
                           className="w-4 h-4 text-indigo-600 rounded"
                           checked={isInstallment}
                           onChange={() => {
-                            setIsInstallment(!isInstallment);
+                            const next = !isInstallment;
+                            setIsInstallment(next);
                             setRecurrence('NONE');
+                            if (!next) {
+                              setInstallmentValueMode('total');
+                            }
                           }}
                         />
                         <CalendarClock size={16} className="text-slate-600" />
@@ -1152,14 +1174,55 @@ export const TransactionManager: React.FC<TransactionManagerProps> = ({
                         <input
                           type="number"
                           min="0"
-                          max={totalInstallments - 1}
+                          max={Math.max(0, totalInstallments - 1)}
                           className="w-full px-3 py-2 border rounded-lg outline-none"
                           value={paidInstallments}
                           onChange={(e) => setPaidInstallments(Number(e.target.value))}
                         />
                         <p className="text-[10px] text-slate-500 mt-1">
-                          Gera apenas as {totalInstallments - paidInstallments} restantes.
+                          Gera apenas as {Math.max(0, totalInstallments - paidInstallments)} restantes.
                         </p>
+                      </div>
+                      <div className="col-span-2 space-y-2">
+                        <p className="text-xs font-bold text-slate-600">Como quer informar o valor?</p>
+                        <div className="flex flex-col sm:flex-row gap-2">
+                          <label
+                            className={`flex-1 border rounded-lg p-3 text-sm font-semibold cursor-pointer transition-colors ${
+                              installmentValueMode === 'total' ? 'border-indigo-500 bg-white' : 'border-slate-200 bg-white'
+                            }`}
+                          >
+                            <div className="flex items-center gap-2">
+                              <input
+                                type="radio"
+                                className="text-indigo-600"
+                                name="installment-value-mode"
+                                checked={installmentValueMode === 'total'}
+                                onChange={() => setInstallmentValueMode('total')}
+                              />
+                              Valor total da compra
+                            </div>
+                            <p className="text-[11px] text-slate-500 mt-1">Dividimos automaticamente pelo numero de parcelas.</p>
+                          </label>
+                          <label
+                            className={`flex-1 border rounded-lg p-3 text-sm font-semibold cursor-pointer transition-colors ${
+                              installmentValueMode === 'perInstallment'
+                                ? 'border-indigo-500 bg-white'
+                                : 'border-slate-200 bg-white'
+                            }`}
+                          >
+                            <div className="flex items-center gap-2">
+                              <input
+                                type="radio"
+                                className="text-indigo-600"
+                                name="installment-value-mode"
+                                checked={installmentValueMode === 'perInstallment'}
+                                onChange={() => setInstallmentValueMode('perInstallment')}
+                              />
+                              Valor por parcela
+                            </div>
+                            <p className="text-[11px] text-slate-500 mt-1">Usamos o valor informado em cada parcela.</p>
+                          </label>
+                        </div>
                       </div>
                     </div>
                   )}
