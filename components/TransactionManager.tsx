@@ -305,6 +305,14 @@ export const TransactionManager: React.FC<TransactionManagerProps> = ({
 
   const stripInstallmentSuffix = (text = '') => text.replace(/\s*\(\d+\/\d+\)\s*$/, '').trim();
 
+  const getInstallmentGroupKey = (tx: Transaction) => {
+    const total = tx.installmentTotal || 0;
+    if (!(tx.isInstallment || total > 1)) return null;
+    const base = (tx.description || '').replace(/\s*\(\d+\/\d+\)\s*$/, '').trim().toLowerCase();
+    const cardMarker = tx.cardId || '';
+    return `${base}__${total}__${cardMarker}`;
+  };
+
   const aggregatedAllTransactions = useMemo(() => {
     const groups = new Map<
       string,
@@ -402,14 +410,6 @@ export const TransactionManager: React.FC<TransactionManagerProps> = ({
 
   const projectedBalance = monthIncomeReceived + monthIncomePending - (monthExpensePaid + monthExpensePending);
   const realizedBalance = monthIncomeReceived - monthExpensePaid;
-
-  const getInstallmentGroupKey = (tx: Transaction) => {
-    const total = tx.installmentTotal || 0;
-    if (!(tx.isInstallment || total > 1)) return null;
-    const base = (tx.description || '').replace(/\s*\(\d+\/\d+\)\s*$/, '').trim().toLowerCase();
-    const cardMarker = tx.cardId || '';
-    return `${base}__${total}__${cardMarker}`;
-  };
 
   const handleDeleteInstallments = (tx: Transaction) => {
     const key = getInstallmentGroupKey(tx);
